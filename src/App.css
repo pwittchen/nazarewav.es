@@ -737,6 +737,33 @@ input[type="range"]::-webkit-slider-runnable-track {
 }
 
 
+/* Source Code Link */
+.source-link {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+.source-link:hover {
+  background: var(--accent);
+  border-color: var(--ring);
+  color: var(--foreground);
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   .control-panel {
