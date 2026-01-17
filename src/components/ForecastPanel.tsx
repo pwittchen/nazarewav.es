@@ -3,6 +3,7 @@ import type { WaveConfig } from '../config/waveConfig';
 import {
   fetchForecastData,
   applyForecastToConfig,
+  findNearestForecast,
   type ForecastEntry,
 } from '../utils/forecast';
 
@@ -57,6 +58,18 @@ export function ForecastPanel({ config, onChange }: ForecastPanelProps) {
       loading: false,
       error: result.error,
     });
+
+    // Select the nearest forecast time by default
+    if (result.entries.length > 0) {
+      const nearest = findNearestForecast(result.entries);
+      if (nearest) {
+        const idx = result.entries.findIndex(e => e === nearest);
+        if (idx >= 0) {
+          setSelectedIndex(idx);
+          setSelectedDay(nearest.dayName);
+        }
+      }
+    }
   };
 
   useEffect(() => {
@@ -177,6 +190,24 @@ export function ForecastPanel({ config, onChange }: ForecastPanelProps) {
                   <span className="detail-label">Wind Dir</span>
                   <span className="detail-value">{selectedEntry.windDirection}°</span>
                 </div>
+                <button
+                  className="detail-item detail-item-button"
+                  onClick={() => {
+                    const nearest = findNearestForecast(forecast.entries);
+                    if (nearest) {
+                      const idx = forecast.entries.findIndex(e => e === nearest);
+                      if (idx >= 0) {
+                        setSelectedIndex(idx);
+                        setSelectedDay(nearest.dayName);
+                      }
+                      applyForecast(nearest);
+                    }
+                  }}
+                  title="Apply current forecast (nearest to now)"
+                >
+                  <span className="detail-label">Show current conditions</span>
+                  <span className="detail-value">NOW</span>
+                </button>
               </div>
 
               <button
