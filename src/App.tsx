@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Scene } from './components/Scene';
 import { ControlPanel } from './components/ControlPanel';
+import { ForecastPanel } from './components/ForecastPanel';
 import { defaultWaveConfig } from './config/waveConfig';
 import type { WaveConfig } from './config/waveConfig';
 import './App.css';
@@ -17,6 +18,7 @@ function App() {
 
       <main className="app-main">
         <Scene config={config} />
+        <ForecastPanel config={config} onChange={setConfig} />
         <ControlPanel config={config} onChange={setConfig} />
       </main>
     </div>
