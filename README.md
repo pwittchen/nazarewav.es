@@ -2,7 +2,7 @@
 
 A 3D wave simulator inspired by the famous Nazaré waves in Portugal. Built with React, Three.js, and TypeScript.
 
-See the app online: https://pwittchen.github.io/nazare-waves/
+See the app online: https://pwittchen.github.io/nazare-waves/ (url will be updated in the future)
 
 ## Features
 
