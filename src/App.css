@@ -392,6 +392,62 @@ input[type="range"]::-webkit-slider-runnable-track {
   transform: translateX(18px);
 }
 
+/* Color Picker */
+.color-picker-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.color-picker-group label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.color-picker-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-picker-input input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 32px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  padding: 0;
+}
+
+.color-picker-input input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.color-picker-input input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
+.color-picker-input input[type="color"]::-moz-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
+.color-picker-input input[type="color"]:hover {
+  border-color: var(--ring);
+}
+
+.color-value {
+  font-size: 0.6875rem;
+  font-family: monospace;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+}
+
 /* Panel Footer */
 .panel-footer {
   padding: 12px 16px;

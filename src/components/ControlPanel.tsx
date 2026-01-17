@@ -60,6 +60,28 @@ function Toggle({ label, checked, onChange }: ToggleProps) {
   );
 }
 
+interface ColorPickerProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function ColorPicker({ label, value, onChange }: ColorPickerProps) {
+  return (
+    <div className="color-picker-group">
+      <label>{label}</label>
+      <div className="color-picker-input">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span className="color-value">{value}</span>
+      </div>
+    </div>
+  );
+}
+
 type SectionKey = 'waves' | 'wind' | 'canyon' | 'visual';
 
 export function ControlPanel({ config, onChange }: ControlPanelProps) {
@@ -84,6 +106,7 @@ export function ControlPanel({ config, onChange }: ControlPanelProps) {
       ...wavePresets[presetName],
       wireframe: config.wireframe,
       animateWaves: config.animateWaves,
+      waveColor: config.waveColor,
     });
   };
 
@@ -319,6 +342,11 @@ export function ControlPanel({ config, onChange }: ControlPanelProps) {
                 label="Wireframe Grid"
                 checked={config.wireframe}
                 onChange={(v) => updateConfig('wireframe', v)}
+              />
+              <ColorPicker
+                label="Wave Color"
+                value={config.waveColor}
+                onChange={(v) => updateConfig('waveColor', v)}
               />
               <Slider
                 label="Foam Threshold"

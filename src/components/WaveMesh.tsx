@@ -92,16 +92,19 @@ export function WaveMesh({ config }: WaveMeshProps) {
     geo.computeVertexNormals();
   });
 
+  // Derive emissive color (darker version of wave color)
+  const emissiveColor = config.wireframe ? config.waveColor : '#000000';
+
   return (
     <mesh ref={meshRef} geometry={geometry} position={[0, 0, 0]}>
       <meshStandardMaterial
-        color={config.wireframe ? '#3b82f6' : '#0066aa'}
+        color={config.waveColor}
         wireframe={config.wireframe}
         metalness={config.wireframe ? 0 : 0.1}
         roughness={config.wireframe ? 1 : 0.3}
         side={THREE.DoubleSide}
-        emissive={config.wireframe ? '#1e40af' : '#000000'}
-        emissiveIntensity={config.wireframe ? 0.3 : 0}
+        emissive={emissiveColor}
+        emissiveIntensity={config.wireframe ? 0.2 : 0}
       />
     </mesh>
   );

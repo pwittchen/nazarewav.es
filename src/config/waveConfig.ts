@@ -39,6 +39,7 @@ export interface WaveConfig {
   // Display
   wireframe: boolean;        // Display as wireframe grid mesh (default: true)
   animateWaves: boolean;     // Enable natural wave movement (default: true)
+  waveColor: string;         // Color of the wave mesh (hex string)
 
   // Animation
   timeScale: number;         // Overall animation speed multiplier
@@ -48,7 +49,7 @@ export const defaultWaveConfig: WaveConfig = {
   // Wave Parameters - Default to moderate Nazaré conditions
   waveHeight: 8,
   wavePeriod: 14,
-  waveDirection: 0,          // Waves coming from back, moving toward viewer
+  waveDirection: 45,         // Waves at angle for better visibility
   waveLength: 200,
   waveSpeed: 1.0,
 
@@ -75,6 +76,7 @@ export const defaultWaveConfig: WaveConfig = {
   // Display
   wireframe: true,           // Grid mesh by default
   animateWaves: true,        // Natural wave movement by default
+  waveColor: '#3be1f7',      // Cyan color by default
 
   // Animation
   timeScale: 1.0,
