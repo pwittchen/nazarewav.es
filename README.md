@@ -96,6 +96,16 @@ All wave parameters can be configured in one place: `src/config/waveConfig.ts`
 
 Nazaré is a fishing village in Portugal famous for having some of the largest waves in the world. The Nazaré Canyon, an underwater canyon that extends for about 230 km, focuses and amplifies Atlantic swells, creating waves that can exceed 30 meters in height. This simulator attempts to recreate this phenomenon by applying canyon amplification effects to the wave simulation.
 
+## Deployment
+
+The app is automatically deployed to GitHub Pages on every push to `master` branch.
+
+To enable GitHub Pages deployment:
+
+1. Go to repository **Settings** → **Pages**
+2. Under **Source**, select **GitHub Actions**
+3. Push to `master` branch to trigger deployment
+
 ## License
 
 MIT
