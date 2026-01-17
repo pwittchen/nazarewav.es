@@ -744,25 +744,6 @@ input[type="range"]::-webkit-slider-runnable-track {
   border-color: var(--ring);
 }
 
-.apply-forecast-button {
-  width: 100%;
-  margin-top: 12px;
-  padding: 10px 16px;
-  background: var(--accent-blue);
-  border: none;
-  border-radius: calc(var(--radius) - 2px);
-  color: white;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.apply-forecast-button:hover {
-  background: #2563eb;
-}
-
-
 /* Source Code Link */
 .source-link {
   position: absolute;

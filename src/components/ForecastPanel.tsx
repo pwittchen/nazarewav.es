@@ -167,7 +167,10 @@ export function ForecastPanel({ config, onChange }: ForecastPanelProps) {
               <button
                 key={entry.index}
                 className={`hour-button ${entry.index === selectedIndex ? 'active' : ''}`}
-                onClick={() => setSelectedIndex(entry.index)}
+                onClick={() => {
+                  setSelectedIndex(entry.index);
+                  applyForecast(entry);
+                }}
               >
                 <span className="hour-time">{entry.hour.toString().padStart(2, '0')}:00</span>
                 <span className={`hour-wave ${getWaveClass(entry.waveHeight)}`}>
@@ -220,12 +223,6 @@ export function ForecastPanel({ config, onChange }: ForecastPanelProps) {
                 </button>
               </div>
 
-              <button
-                className="apply-forecast-button"
-                onClick={() => applyForecast(selectedEntry)}
-              >
-                Apply to Simulator
-              </button>
             </div>
           )}
 
