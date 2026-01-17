@@ -510,7 +510,7 @@ input[type="range"]::-webkit-slider-runnable-track {
   bottom: 16px;
   left: 16px;
   z-index: 100;
-  width: 700px;
+  width: 650px;
   max-height: calc(100vh - 100px);
   background: var(--card);
   border: 1px solid var(--border);
@@ -587,6 +587,7 @@ input[type="range"]::-webkit-slider-runnable-track {
 }
 
 .day-button {
+  flex: 1;
   padding: 6px 12px;
   background: var(--muted);
   border: 1px solid var(--border);
