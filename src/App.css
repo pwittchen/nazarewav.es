@@ -103,7 +103,7 @@ body {
   top: 16px;
   right: 16px;
   width: var(--panel-width);
-  max-height: calc(100vh - 32px);
+  max-height: calc(100vh - 96px);
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
