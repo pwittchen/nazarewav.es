@@ -480,9 +480,10 @@ input[type="range"]::-webkit-slider-runnable-track {
 
 /* Forecast Panel */
 .forecast-toggle {
-  position: absolute;
+  position: fixed;
   bottom: 16px;
   left: 16px;
+  z-index: 100;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -496,6 +497,7 @@ input[type="range"]::-webkit-slider-runnable-track {
   cursor: pointer;
   transition: all 0.15s ease;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  transform: translateZ(0);
 }
 
 .forecast-toggle:hover {
@@ -504,9 +506,10 @@ input[type="range"]::-webkit-slider-runnable-track {
 }
 
 .forecast-panel {
-  position: absolute;
+  position: fixed;
   bottom: 16px;
   left: 16px;
+  z-index: 100;
   width: 700px;
   max-height: calc(100vh - 100px);
   background: var(--card);
@@ -516,6 +519,7 @@ input[type="range"]::-webkit-slider-runnable-track {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transform: translateZ(0);
 }
 
 .forecast-panel-large {
