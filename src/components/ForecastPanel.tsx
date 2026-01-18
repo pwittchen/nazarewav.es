@@ -203,7 +203,7 @@ export function ForecastPanel({ config, onChange }: ForecastPanelProps) {
                 </div>
                 <div className="detail-item">
                   <span className="detail-label">Wind</span>
-                  <span className="detail-value">{selectedEntry.windSpeed} kn</span>
+                  <span className="detail-value">{selectedEntry.windSpeed} kts</span>
                 </div>
                 <div className="detail-item">
                   <span className="detail-label">Wind Dir</span>
