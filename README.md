@@ -2,6 +2,8 @@
 
 A 3D wave simulator inspired by the famous Nazaré waves in Portugal. Built with React, Three.js, and TypeScript.
 
+See it online: https://nazarewav.es
+
 ## Features
 
 - **Animated 3D Wave Mesh** - Realistic wave simulation with configurable parameters
