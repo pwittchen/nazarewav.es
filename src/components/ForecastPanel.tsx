@@ -20,7 +20,7 @@ interface ForecastData {
 }
 
 export function ForecastPanel({ config, onChange }: ForecastPanelProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const [forecast, setForecast] = useState<ForecastData>({
     entries: [],
     lastUpdated: '',
