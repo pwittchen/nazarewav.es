@@ -65,7 +65,7 @@ export const defaultWaveConfig: WaveConfig = {
   windChopIntensity: 0.3,
 
   // Canyon Effect
-  canyonAmplification: 2.0,
+  canyonAmplification: 3.0,
   canyonFocusWidth: 0.4,
   canyonDepthEffect: 0.7,
 
