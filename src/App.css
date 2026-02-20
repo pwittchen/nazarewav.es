@@ -826,7 +826,7 @@ input[type="range"]::-webkit-slider-runnable-track {
     right: 12px;
     top: 48px;
     width: calc(100vw - 24px);
-    max-height: 40vh;
+    max-height: 30vh;
   }
 
   .panel-toggle.collapsed {
