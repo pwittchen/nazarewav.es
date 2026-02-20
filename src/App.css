@@ -620,6 +620,9 @@ input[type="range"]::-webkit-slider-runnable-track {
 
 .day-button {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 6px 12px;
   background: var(--muted);
   border: 1px solid var(--border);
@@ -630,6 +633,11 @@ input[type="range"]::-webkit-slider-runnable-track {
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
+}
+
+.day-name {
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
 .day-button:hover {
@@ -698,14 +706,15 @@ input[type="range"]::-webkit-slider-runnable-track {
 
 /* Forecast Details */
 .forecast-details {
-  padding: 12px 16px;
+  padding: 12px 14px;
 }
 
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  margin-bottom: 12px;
+  margin-top: 5px;
+  margin-bottom: 5px;
 }
 
 .detail-item {
@@ -805,16 +814,85 @@ input[type="range"]::-webkit-slider-runnable-track {
 
 /* Responsive */
 @media (max-width: 640px) {
-  .control-panel {
-    width: calc(100vw - 32px);
-    max-width: var(--panel-width);
-  }
-
   .app-header {
     padding: 12px 16px;
   }
 
   .app-header h1 {
     font-size: 1rem;
+  }
+
+  .app-header .subtitle {
+    display: none;
+  }
+
+  .control-panel {
+    right: 12px;
+    top: 48px;
+    width: calc(100vw - 24px);
+    max-height: 40vh;
+  }
+
+  .panel-toggle.collapsed {
+    top: 48px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .forecast-toggle {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .forecast-toggle span {
+    display: none;
+  }
+
+  .forecast-panel {
+    width: calc(100vw - 24px);
+    max-height: calc(50vh - 24px);
+    bottom: 12px;
+    left: 12px;
+  }
+
+  input[type="range"] {
+    height: 8px;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    width: 22px;
+    height: 22px;
+    box-shadow: 0 0 0 3px var(--background);
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    box-shadow: 0 0 0 3px var(--background);
+  }
+
+  .source-link {
+    display: none;
+  }
+
+  .detail-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .forecast-hours {
+    gap: 4px;
+    padding: 8px 12px;
+    max-height: 160px;
+  }
+
+  .hour-button {
+    min-width: 48px;
+    padding: 5px 8px;
+  }
+
+  .day-button {
+    padding: 10px 10px;
   }
 }

@@ -26,7 +26,7 @@ function degreesToCompass(degrees: number): string {
 }
 
 export function ForecastPanel({ config, onChange }: ForecastPanelProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(() => window.innerWidth >= 640);
   const [forecast, setForecast] = useState<ForecastData>({
     entries: [],
     lastUpdated: '',
@@ -158,13 +158,13 @@ export function ForecastPanel({ config, onChange }: ForecastPanelProps) {
 
           <div className="forecast-days">
             {days.map(day => (
-              <button
-                key={day}
-                className={`day-button ${day === selectedDay ? 'active' : ''}`}
-                onClick={() => setSelectedDay(day)}
-              >
-                {day}
-              </button>
+                <button
+                  key={day}
+                  className={`day-button ${day === selectedDay ? 'active' : ''}`}
+                  onClick={() => setSelectedDay(day)}
+                >
+                  <span className="day-name">{day}</span>
+                </button>
             ))}
           </div>
 

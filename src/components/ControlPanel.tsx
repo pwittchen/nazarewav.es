@@ -85,7 +85,7 @@ function ColorPicker({ label, value, onChange }: ColorPickerProps) {
 type SectionKey = 'waves' | 'wind' | 'canyon' | 'visual';
 
 export function ControlPanel({ config, onChange }: ControlPanelProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth < 640);
   const [expandedSections, setExpandedSections] = useState<Record<SectionKey, boolean>>({
     waves: true,
     wind: false,
