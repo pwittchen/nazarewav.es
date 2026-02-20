@@ -10,6 +10,8 @@ import {
 interface ForecastPanelProps {
   config: WaveConfig;
   onChange: (config: WaveConfig) => void;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 interface ForecastData {
@@ -25,8 +27,17 @@ function degreesToCompass(degrees: number): string {
   return directions[index];
 }
 
-export function ForecastPanel({ config, onChange }: ForecastPanelProps) {
-  const [isOpen, setIsOpen] = useState(() => window.innerWidth >= 640);
+export function ForecastPanel({ config, onChange, isOpen: controlledIsOpen, onOpenChange }: ForecastPanelProps) {
+  const [internalIsOpen, setInternalIsOpen] = useState(() => window.innerWidth >= 640);
+
+  const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
+  const setIsOpen = (open: boolean) => {
+    if (onOpenChange) {
+      onOpenChange(open);
+    } else {
+      setInternalIsOpen(open);
+    }
+  };
   const [forecast, setForecast] = useState<ForecastData>({
     entries: [],
     lastUpdated: '',

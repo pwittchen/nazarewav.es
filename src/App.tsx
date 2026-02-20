@@ -13,6 +13,15 @@ import './App.css';
 
 function App() {
   const [config, setConfig] = useState<WaveConfig>(defaultWaveConfig);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
+  const [controlPanelOpen, setControlPanelOpen] = useState(false);
+  const [forecastPanelOpen, setForecastPanelOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Apply theme to document for CSS variable switching
   useEffect(() => {
@@ -29,6 +38,16 @@ function App() {
     });
   }, []);
 
+  const handleControlPanelOpenChange = (open: boolean) => {
+    setControlPanelOpen(open);
+    if (open) setForecastPanelOpen(false);
+  };
+
+  const handleForecastPanelOpenChange = (open: boolean) => {
+    setForecastPanelOpen(open);
+    if (open) setControlPanelOpen(false);
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -38,8 +57,18 @@ function App() {
 
       <main className="app-main">
         <Scene config={config} />
-        <ForecastPanel config={config} onChange={setConfig} />
-        <ControlPanel config={config} onChange={setConfig} />
+        <ForecastPanel
+          config={config}
+          onChange={setConfig}
+          {...(isMobile ? { isOpen: forecastPanelOpen, onOpenChange: handleForecastPanelOpenChange } : {})}
+        />
+        {!(isMobile && forecastPanelOpen) && (
+          <ControlPanel
+            config={config}
+            onChange={setConfig}
+            {...(isMobile ? { isOpen: controlPanelOpen, onOpenChange: handleControlPanelOpenChange } : {})}
+          />
+        )}
       </main>
 
       <a

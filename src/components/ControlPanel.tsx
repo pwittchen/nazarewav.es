@@ -5,6 +5,8 @@ import { configLimits, wavePresets } from '../config/waveConfig';
 interface ControlPanelProps {
   config: WaveConfig;
   onChange: (config: WaveConfig) => void;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 interface SliderProps {
@@ -84,8 +86,18 @@ function ColorPicker({ label, value, onChange }: ColorPickerProps) {
 
 type SectionKey = 'waves' | 'wind' | 'canyon' | 'visual';
 
-export function ControlPanel({ config, onChange }: ControlPanelProps) {
-  const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth < 640);
+export function ControlPanel({ config, onChange, isOpen: controlledIsOpen, onOpenChange }: ControlPanelProps) {
+  const [internalIsOpen, setInternalIsOpen] = useState(() => window.innerWidth >= 640);
+
+  const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
+  const setIsOpen = (open: boolean) => {
+    if (onOpenChange) {
+      onOpenChange(open);
+    } else {
+      setInternalIsOpen(open);
+    }
+  };
+
   const [expandedSections, setExpandedSections] = useState<Record<SectionKey, boolean>>({
     waves: true,
     wind: false,
@@ -111,11 +123,11 @@ export function ControlPanel({ config, onChange }: ControlPanelProps) {
     });
   };
 
-  if (isCollapsed) {
+  if (!isOpen) {
     return (
       <button
         className="panel-toggle collapsed"
-        onClick={() => setIsCollapsed(false)}
+        onClick={() => setIsOpen(true)}
         aria-label="Open controls"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -132,7 +144,7 @@ export function ControlPanel({ config, onChange }: ControlPanelProps) {
         <h2>Wave Parameters</h2>
         <button
           className="panel-toggle"
-          onClick={() => setIsCollapsed(true)}
+          onClick={() => setIsOpen(false)}
           aria-label="Close controls"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
