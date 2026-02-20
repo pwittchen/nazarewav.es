@@ -554,10 +554,6 @@ input[type="range"]::-webkit-slider-runnable-track {
   transform: translateZ(0);
 }
 
-.forecast-panel-large {
-  width: 420px;
-}
-
 .forecast-header {
   display: flex;
   justify-content: space-between;

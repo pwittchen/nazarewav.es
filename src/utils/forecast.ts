@@ -95,7 +95,7 @@ async function fetchWithProxy(url: string): Promise<string> {
   throw new Error('All CORS proxies failed');
 }
 
-export function generateFallbackForecast(): ForecastEntry[] {
+function generateFallbackForecast(): ForecastEntry[] {
   const entries: ForecastEntry[] = [];
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const today = new Date();
