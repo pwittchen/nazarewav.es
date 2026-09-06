@@ -17,10 +17,14 @@ interface WindData {
   windDirection: number;
 }
 
+// CORS proxies, tried in order. r.jina.ai returns the page as plain text
+// (no <pre> wrapper) — the parser handles both forms.
 const CORS_PROXIES = [
+  'https://r.jina.ai/',
   'https://api.allorigins.win/raw?url=',
-  'https://corsproxy.io/?',
+  'https://api.codetabs.com/v1/proxy?quest=',
 ];
+const PROXY_TIMEOUT_MS = 15000;
 const WAVE_URL = 'https://micro.windguru.cz/?s=75856&m=gfswh';
 const WIND_URL = 'https://micro.windguru.cz/?s=75856&m=gfs';
 
@@ -81,18 +85,38 @@ function parseWindguruText(waveText: string, windText: string): ForecastEntry[] 
   return entries;
 }
 
-async function fetchWithProxy(url: string): Promise<string> {
+/**
+ * Fetch `url` through the first CORS proxy that returns usable content.
+ * `marker` is a string that must appear in the response (a column header from
+ * the Windguru table) — proxies happily return 200 with their own error pages,
+ * so a status check alone is not enough.
+ */
+async function fetchWithProxy(url: string, marker: string): Promise<string> {
+  const errors: string[] = [];
+
   for (const proxy of CORS_PROXIES) {
     try {
-      const response = await fetch(proxy + encodeURIComponent(url));
-      if (response.ok) {
-        return await response.text();
+      const response = await fetch(proxy + encodeURIComponent(url), {
+        signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        errors.push(`${proxy} -> HTTP ${response.status}`);
+        continue;
       }
+
+      const text = await response.text();
+      if (!text.includes(marker)) {
+        errors.push(`${proxy} -> unexpected content`);
+        continue;
+      }
+
+      return text;
     } catch (e) {
-      console.warn(`Proxy ${proxy} failed:`, e);
+      errors.push(`${proxy} -> ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  throw new Error('All CORS proxies failed');
+
+  throw new Error(`All CORS proxies failed: ${errors.join('; ')}`);
 }
 
 function generateFallbackForecast(): ForecastEntry[] {
@@ -132,11 +156,11 @@ export interface ForecastResult {
 export async function fetchForecastData(): Promise<ForecastResult> {
   try {
     const [waveText, windText] = await Promise.all([
-      fetchWithProxy(WAVE_URL),
-      fetchWithProxy(WIND_URL),
+      fetchWithProxy(WAVE_URL, 'HTSGW'),
+      fetchWithProxy(WIND_URL, 'WSPD'),
     ]);
 
-    let entries = parseWindguruText(waveText, windText);
+    const entries = parseWindguruText(waveText, windText);
 
     if (entries.length === 0) {
       console.warn('Parsing returned no entries, using fallback');
