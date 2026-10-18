@@ -1,8 +1,17 @@
-# Nazaré Waves Simulator
+<p align="center">
+  <img src="icon.png" alt="Nazaré Waves Simulator" width="160" />
+</p>
 
-A 3D wave simulator inspired by the famous Nazaré waves in Portugal. Built with React, Three.js, and TypeScript.
+<h1 align="center">Nazaré Waves Simulator</h1>
 
-See it online: https://nazarewav.es
+<p align="center">
+  A 3D wave simulator inspired by the famous Nazaré waves in Portugal.<br />
+  Built with React, Three.js, and TypeScript.
+</p>
+
+<p align="center">
+  <a href="https://nazarewav.es"><strong>nazarewav.es</strong></a>
+</p>
 
 ## Features
 
