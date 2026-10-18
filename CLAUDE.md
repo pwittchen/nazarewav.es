@@ -28,6 +28,14 @@ This is a 3D wave simulator built with React Three Fiber (R3F), simulating the f
 
 - **`src/components/Scene.tsx`** - R3F Canvas setup with camera, lighting, OrbitControls, and fog.
 
+- **`src/utils/terrain.ts`** - Procedural Nazaré coastline: `terrainHeight()` (Praia do Norte beach/dunes, Sítio plateau cliffs, fort promontory, canyon head), wave damping over the shallows, and the shore map texture used by the far-ocean shader. World orientation: -Z = Atlantic (west), +Z = land (east), +X = north, -X = south (headland).
+
+- **`src/components/Coast.tsx`** - Terrain mesh with vertex colors, pine forest, dune scrub, cliff-foot rocks, Sítio village and Santuário (shown when `showCoast` is on).
+
+- **`src/components/Lighthouse.tsx`** - Forte de São Miguel Arcanjo with the red lighthouse tower; rotating beam and spotlights in the dark theme.
+
+- **`src/components/FarOcean.tsx`** - GPU-animated ocean extending the wave mesh out to the coast. Its vertex shader mirrors the WaveMesh wave equations, so keep both in sync.
+
 - **`src/components/ControlPanel.tsx`** - UI panel with sliders and toggles for real-time parameter adjustment.
 
 - **`src/components/ForecastPanel.tsx`** - UI panel displaying live Nazaré wave forecast. Shows forecast data grouped by day/hour, allows selecting specific forecast times, and applies forecast values to the wave config.

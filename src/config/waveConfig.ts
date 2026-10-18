@@ -41,6 +41,7 @@ export interface WaveConfig {
   animateWaves: boolean;     // Enable natural wave movement (default: true)
   waveColor: string;         // Color of the wave mesh (hex string)
   theme: 'dark' | 'light';   // UI and scene color theme (default: dark)
+  showCoast: boolean;        // Show the Nazaré coast: Praia do Norte, cliffs, fort & lighthouse (default: true)
 
   // Animation
   timeScale: number;         // Overall animation speed multiplier
@@ -79,6 +80,7 @@ export const defaultWaveConfig: WaveConfig = {
   animateWaves: true,        // Natural wave movement by default
   waveColor: '#3be1f7',      // Cyan color by default
   theme: 'dark',             // Dark theme by default
+  showCoast: true,           // Coastline visible by default
 
   // Animation
   timeScale: 1.0,

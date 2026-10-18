@@ -120,6 +120,7 @@ export function ControlPanel({ config, onChange, isOpen: controlledIsOpen, onOpe
       animateWaves: config.animateWaves,
       waveColor: config.waveColor,
       theme: config.theme,
+      showCoast: config.showCoast,
     });
   };
 
@@ -355,6 +356,11 @@ export function ControlPanel({ config, onChange, isOpen: controlledIsOpen, onOpe
                 label="Animate Waves"
                 checked={config.animateWaves}
                 onChange={(v) => updateConfig('animateWaves', v)}
+              />
+              <Toggle
+                label="Nazaré Coast"
+                checked={config.showCoast}
+                onChange={(v) => updateConfig('showCoast', v)}
               />
               <Toggle
                 label="Wireframe Grid"

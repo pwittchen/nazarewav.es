@@ -2,6 +2,8 @@ import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WaveConfig } from '../config/waveConfig';
+import { terrainHeight, shoreAttenuation, waveDamping, surfFoam } from '../utils/terrain';
+import { FarOcean } from './FarOcean';
 
 interface WaveMeshProps {
   config: WaveConfig;
@@ -27,6 +29,18 @@ export function WaveMesh({ config }: WaveMeshProps) {
   const originalPositions = useMemo(() => {
     return new Float32Array(geometry.attributes.position.array);
   }, [geometry]);
+
+  // Seabed height and swell attenuation per vertex (waves die out over the shallows)
+  const shoreData = useMemo(() => {
+    const count = originalPositions.length / 3;
+    const seabed = new Float32Array(count);
+    const attenuation = new Float32Array(count);
+    for (let v = 0; v < count; v++) {
+      seabed[v] = terrainHeight(originalPositions[v * 3], originalPositions[v * 3 + 2]);
+      attenuation[v] = shoreAttenuation(seabed[v]);
+    }
+    return { seabed, attenuation };
+  }, [originalPositions]);
 
   // Parse base wave color for blending with foam
   const baseColor = useMemo(() => {
@@ -137,12 +151,17 @@ export function WaveMesh({ config }: WaveMeshProps) {
         chopSlope = (chopDeriv1 * 0.5 + chopDeriv2 * 0.3) * windChopMultiplier * 3;
       }
 
+      // Near the coast the swell shoals and breaks, so it fades out over the shallows
+      const shoreDamping = config.showCoast
+        ? waveDamping(shoreData.seabed[vertexIndex], primaryAmplitude + secondaryAmplitude + windChopMultiplier * 3)
+        : 1;
+
       // Set Y position (height)
-      const totalHeight = primaryWave + secondaryWave + windChop;
+      const totalHeight = (primaryWave + secondaryWave + windChop) * shoreDamping;
       positions[i + 1] = totalHeight;
 
       // Calculate total slope magnitude for foam
-      const totalSlope = Math.abs(primarySlope + secondarySlope + chopSlope);
+      const totalSlope = Math.abs(primarySlope + secondarySlope + chopSlope) * shoreDamping;
 
       // Wave steepness (slope relative to wavelength) - higher = more likely to break
       const steepness = totalSlope / gridSpacing;
@@ -160,6 +179,12 @@ export function WaveMesh({ config }: WaveMeshProps) {
         // More foam on wave crests (where height is positive and high)
         const crestBonus = Math.max(0, totalHeight / (config.waveHeight * 2));
         foamAmount = Math.min(1, foamAmount + crestBonus * config.foamIntensity * 0.5);
+      }
+
+      // Whitewater in the surf zone
+      if (config.showCoast) {
+        const surf = surfFoam(shoreData.attenuation[vertexIndex], primaryPhase) * (0.4 + config.foamIntensity * 0.6);
+        foamAmount = Math.max(foamAmount, surf);
       }
 
       // Apply water clarity to base color
@@ -184,19 +209,22 @@ export function WaveMesh({ config }: WaveMeshProps) {
   const opacity = config.wireframe ? 1 : 0.85 + config.waterClarity * 0.15;
 
   return (
-    <mesh ref={meshRef} geometry={geometry} position={[0, 0, 0]}>
-      <meshStandardMaterial
-        vertexColors={!config.wireframe}
-        color={config.wireframe ? config.waveColor : '#ffffff'}
-        wireframe={config.wireframe}
-        metalness={config.wireframe ? 0 : 0.1}
-        roughness={config.wireframe ? 1 : 0.3 - config.waterClarity * 0.2}
-        side={THREE.DoubleSide}
-        emissive={config.wireframe ? config.waveColor : '#000000'}
-        emissiveIntensity={config.wireframe ? 0.2 : 0}
-        transparent={!config.wireframe}
-        opacity={opacity}
-      />
-    </mesh>
+    <>
+      <mesh ref={meshRef} geometry={geometry} position={[0, 0, 0]}>
+        <meshStandardMaterial
+          vertexColors={!config.wireframe}
+          color={config.wireframe ? config.waveColor : '#ffffff'}
+          wireframe={config.wireframe}
+          metalness={config.wireframe ? 0 : 0.1}
+          roughness={config.wireframe ? 1 : 0.3 - config.waterClarity * 0.2}
+          side={THREE.DoubleSide}
+          emissive={config.wireframe ? config.waveColor : '#000000'}
+          emissiveIntensity={config.wireframe ? 0.2 : 0}
+          transparent={!config.wireframe}
+          opacity={opacity}
+        />
+      </mesh>
+      {config.showCoast && <FarOcean config={config} timeRef={timeRef} />}
+    </>
   );
 }

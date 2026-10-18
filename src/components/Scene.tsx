@@ -1,6 +1,7 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { WaveMesh } from './WaveMesh';
+import { Coast } from './Coast';
 import type { WaveConfig } from '../config/waveConfig';
 
 interface SceneProps {
@@ -40,8 +41,9 @@ export function Scene({ config }: SceneProps) {
 
   return (
     <Canvas
-      camera={{ position: [0, 40, 100], fov: 60, near: 0.1, far: 1000 }}
+      camera={{ position: [180, 65, 190], fov: 60, near: 0.1, far: 4000 }}
       gl={{ antialias: true, alpha: false }}
+      onCreated={({ gl }) => { gl.localClippingEnabled = true; }}
     >
       {/* Sky background */}
       <color attach="background" args={[theme.background]} />
@@ -63,18 +65,21 @@ export function Scene({ config }: SceneProps) {
       {/* Wave mesh */}
       <WaveMesh config={config} />
 
+      {/* Praia do Norte, Sítio cliffs, fort and lighthouse */}
+      {config.showCoast && <Coast config={config} />}
+
       {/* Camera controls */}
       <OrbitControls
         enableDamping
         dampingFactor={0.05}
         minDistance={30}
-        maxDistance={250}
+        maxDistance={config.showCoast ? 700 : 250}
         maxPolarAngle={Math.PI / 2.1}
-        target={[0, 0, 0]}
+        target={[-60, 5, 40]}
       />
 
       {/* Atmospheric fog */}
-      <fog attach="fog" args={[theme.fogColor, 150, 400]} />
+      <fog attach="fog" args={config.showCoast ? [theme.fogColor, 250, 1400] : [theme.fogColor, 150, 400]} />
     </Canvas>
   );
 }
