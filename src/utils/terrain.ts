@@ -6,7 +6,7 @@
  *   +X = north (Praia do Norte), -X = south (Sítio headland + fort)
  *
  * Landmarks:
- *   - Praia do Norte: long sandy beach along z ≈ 152, backed by dunes and pine forest
+ *   - Praia do Norte: long sandy beach along z ≈ 152, backed by dunes and scrubland
  *   - Sítio plateau: ~80m high ochre sandstone cliffs at the south end of the beach
  *   - Promontório: lower rock spur jutting into the sea, topped by the
  *     Forte de São Miguel Arcanjo and its red lighthouse
@@ -182,7 +182,7 @@ export function terrainHeight(x: number, z: number) {
     // Head of the Nazaré Canyon - keeps water deep right up to the beach
     h -= 28 * Math.exp(-(x * x) / (70 * 70)) * smoothstep(-15, -140, d);
   } else {
-    // Beach -> dunes -> pine forest hinterland
+    // Beach -> dunes -> scrubland hinterland
     const beach = 4.5 * smoothstep(0, 60, d) + d * 0.01;
     const duneMask = smoothstep(45, 85, d);
     const dunes = duneMask * (7 + 5 * fbm(x * 0.025, z * 0.025, 4) + 3 * Math.abs(fbm(x * 0.07, z * 0.05, 2)));

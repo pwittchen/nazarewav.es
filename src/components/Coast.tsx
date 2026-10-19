@@ -40,7 +40,6 @@ const palette = {
   sand: new THREE.Color('#d6c096'),
   drySand: new THREE.Color('#e3d1a8'),
   duneGrass: new THREE.Color('#8c8d58'),
-  forestFloor: new THREE.Color('#44522e'),
   plateau: new THREE.Color('#77793f'),
   scrub: new THREE.Color('#5f6a39'),
   sandstone: new THREE.Color('#bb8656'),
@@ -69,7 +68,7 @@ function terrainColor(x: number, y: number, z: number, normalY: number, out: THR
   } else {
     out.copy(palette.sand).lerp(palette.drySand, smoothstep(10, 40, d));
     out.lerp(palette.duneGrass, smoothstep(55, 85, d) * smoothstep(-0.2, 0.25, fbm(x * 0.04, z * 0.04, 3)));
-    out.lerp(palette.forestFloor, smoothstep(90, 130, d));
+    out.lerp(palette.scrub, smoothstep(90, 130, d));
   }
 
   // Town: beach, calçada promenade, the seafront avenue, then built-up ground
@@ -143,56 +142,12 @@ function createTerrainGeometry() {
   return geo;
 }
 
-/** Maritime pine forest (Pinhal) behind Praia do Norte, scrub on the dunes */
+/** Low scrub on the dunes behind Praia do Norte */
 function createVegetation() {
   const rand = createRandom(1987);
-  const trunks: InstanceSpec[] = [];
-  const canopies: InstanceSpec[] = [];
   const shrubs: InstanceSpec[] = [];
-  const trunkColor = new THREE.Color('#4b3826');
-  const pineDark = new THREE.Color('#263d20');
-  const pineLight = new THREE.Color('#3f5a2c');
   const shrubDark = new THREE.Color('#4f5733');
   const shrubLight = new THREE.Color('#7d8050');
-
-  for (let attempt = 0; attempt < 16000 && canopies.length < 2600; attempt++) {
-    const x = lerp(-175, TERRAIN_BOUNDS.maxX - 20, rand());
-    const z = lerp(150, TERRAIN_BOUNDS.maxZ - 20, rand());
-    const d = z - shoreZ(x);
-    if (d < 95 + rand() * 35) continue;
-    if (plateauDistance(x, z) > -12) continue;
-    // Natural clearings
-    if (fbm(x * 0.01, z * 0.01, 2) < -0.15 && rand() < 0.75) continue;
-    addPine(x, z);
-  }
-
-  // Pine woods on the plateau inland of the Sítio and above the town
-  for (let attempt = 0; attempt < 16000 && canopies.length < 3400; attempt++) {
-    const x = lerp(TERRAIN_BOUNDS.minX + 20, -200, rand());
-    const z = lerp(560, TERRAIN_BOUNDS.maxZ - 10, rand());
-    const s = plateauDistance(x, z);
-    if (s < 40 || (x > -470 && z < 660)) continue;
-    if (fbm(x * 0.01, z * 0.01, 2) < -0.1 && rand() < 0.8) continue;
-    addPine(x, z);
-  }
-
-  function addPine(x: number, z: number) {
-    const y = terrainHeight(x, z);
-    const height = 8 + rand() * 7;
-    const spread = 3.2 + rand() * 2.4;
-    trunks.push({
-      position: new THREE.Vector3(x, y - 0.5, z),
-      rotationY: 0,
-      scale: new THREE.Vector3(1, height * 0.8, 1),
-      color: trunkColor,
-    });
-    canopies.push({
-      position: new THREE.Vector3(x, y + height * 0.8, z),
-      rotationY: rand() * Math.PI,
-      scale: new THREE.Vector3(spread, spread * (0.45 + rand() * 0.2), spread * (0.8 + rand() * 0.4)),
-      color: pineDark.clone().lerp(pineLight, rand()),
-    });
-  }
 
   for (let attempt = 0; attempt < 12000 && shrubs.length < 2400; attempt++) {
     const x = lerp(-165, TERRAIN_BOUNDS.maxX - 20, rand());
@@ -210,17 +165,10 @@ function createVegetation() {
     });
   }
 
-  const trunkGeo = new THREE.CylinderGeometry(0.22, 0.38, 1, 5);
-  trunkGeo.translate(0, 0.5, 0);
-  const canopyGeo = new THREE.IcosahedronGeometry(1, 1);
   const shrubGeo = new THREE.IcosahedronGeometry(1, 0);
   const foliage = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true });
 
-  return [
-    createInstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ roughness: 1 }), trunks),
-    createInstancedMesh(canopyGeo, foliage, canopies),
-    createInstancedMesh(shrubGeo, foliage, shrubs),
-  ];
+  return [createInstancedMesh(shrubGeo, foliage, shrubs)];
 }
 
 /** Boulders at the foot of the headland cliffs */
