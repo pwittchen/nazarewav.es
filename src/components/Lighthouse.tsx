@@ -14,8 +14,16 @@ const FORT_OUTLINE: [number, number][] = [
 const WALL_BASE = FORT_GROUND - 8;   // Walls rise from the rock below the courtyard
 const WALL_TOP = FORT_GROUND + 5;
 const TOWER_POSITION: [number, number] = [12.2, -9.2]; // On the seaward north-west bastion
-const TOWER_HEIGHT = 10;
-const LANTERN_Y = WALL_TOP + TOWER_HEIGHT + 1.3;
+// Farol da Nazaré: an ~8 m round cast-iron tower painted red, standing on the fort wall
+const PLINTH_HEIGHT = 0.6;
+const TOWER_HEIGHT = 4.2;  // Iron shaft up to the gallery
+const GALLERY_Y = PLINTH_HEIGHT + TOWER_HEIGHT;
+const PARAPET_HEIGHT = 0.6;
+const GLAZING_HEIGHT = 1.4;
+const GLAZING_Y = GALLERY_Y + 0.2 + PARAPET_HEIGHT; // Bottom of the glazed lantern
+const ROOF_Y = GLAZING_Y + GLAZING_HEIGHT;
+const LANTERN_Y = WALL_TOP + GLAZING_Y + GLAZING_HEIGHT / 2;
+const IRON_RED = '#c4211a';
 const BEAM_LENGTH = 420;
 const ROTATION_PERIOD = 10; // seconds per full turn of the optic
 
@@ -60,7 +68,7 @@ const beamFragmentShader = `
 `;
 
 /**
- * Forte de São Miguel Arcanjo with the red square tower of the Farol da Nazaré.
+ * Forte de São Miguel Arcanjo with the round red cast-iron tower of the Farol da Nazaré.
  */
 export function Lighthouse({ night: isNight }: LighthouseProps) {
   const beamRef = useRef<THREE.Group>(null);
@@ -136,37 +144,66 @@ export function Lighthouse({ night: isNight }: LighthouseProps) {
         ))}
       </group>
 
-      {/* Farol da Nazaré: red square tower on the bastion */}
+      {/* Farol da Nazaré: round red cast-iron tower on the bastion */}
       <group position={[towerX, WALL_TOP, towerZ]}>
-        <mesh position={[0, TOWER_HEIGHT / 2, 0]}>
-          <boxGeometry args={[3.2, TOWER_HEIGHT, 3.2]} />
-          <meshStandardMaterial color="#b3261e" roughness={0.6} />
+        {/* Limestone plinth on the wall */}
+        <mesh position={[0, PLINTH_HEIGHT / 2, 0]}>
+          <cylinderGeometry args={[1.6, 1.7, PLINTH_HEIGHT, 20]} />
+          <meshStandardMaterial color="#d2c6a8" roughness={0.9} />
         </mesh>
-        {/* Door and small windows */}
-        <mesh position={[0, 1.2, 1.62]}>
-          <boxGeometry args={[1, 2.2, 0.05]} />
-          <meshStandardMaterial color="#3a2a22" />
+        {/* Slightly tapered iron shaft with riveted plate bands */}
+        <mesh position={[0, PLINTH_HEIGHT + TOWER_HEIGHT / 2, 0]}>
+          <cylinderGeometry args={[1.05, 1.25, TOWER_HEIGHT, 24]} />
+          <meshStandardMaterial color={IRON_RED} metalness={0.3} roughness={0.5} />
         </mesh>
-        {[4, 7].map((wy) => (
-          <mesh key={wy} position={[-1.62, wy, 0]}>
-            <boxGeometry args={[0.05, 0.9, 0.6]} />
-            <meshStandardMaterial color="#1f1d1d" />
+        {[0.25, 0.5, 0.75].map((f) => (
+          <mesh key={f} position={[0, PLINTH_HEIGHT + TOWER_HEIGHT * f, 0]}>
+            <cylinderGeometry args={[1.27 - 0.2 * f, 1.27 - 0.2 * f, 0.1, 24]} />
+            <meshStandardMaterial color="#a81b15" metalness={0.3} roughness={0.5} />
           </mesh>
         ))}
-        {/* Gallery with railing */}
-        <mesh position={[0, TOWER_HEIGHT + 0.15, 0]}>
-          <boxGeometry args={[4.4, 0.3, 4.4]} />
-          <meshStandardMaterial color="#e9e6df" roughness={0.7} />
+        {/* Door facing the courtyard and portholes towards the sea */}
+        <mesh position={[0, PLINTH_HEIGHT + 0.95, 1.2]}>
+          <boxGeometry args={[0.8, 1.9, 0.12]} />
+          <meshStandardMaterial color="#5a1410" roughness={0.6} />
         </mesh>
-        {[[0, 2.15, 4.4, 0.08], [0, -2.15, 4.4, 0.08], [2.15, 0, 0.08, 4.4], [-2.15, 0, 0.08, 4.4]].map(([rx, rz, w, d]) => (
-          <mesh key={`${rx},${rz}`} position={[rx, TOWER_HEIGHT + 0.85, rz]}>
-            <boxGeometry args={[w, 0.08, d]} />
-            <meshStandardMaterial color="#d9d6cf" metalness={0.5} roughness={0.4} />
+        {[[-Math.PI / 2, 2.9], [Math.PI, 2.1]].map(([angle, wy]) => (
+          <group key={angle} rotation={[0, angle, 0]}>
+            <mesh position={[0, PLINTH_HEIGHT + wy, 1.12]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.2, 0.2, 0.12, 12]} />
+              <meshStandardMaterial color="#1f1d1d" roughness={0.3} />
+            </mesh>
+          </group>
+        ))}
+        {/* Flared corbel carrying the service gallery */}
+        <mesh position={[0, GALLERY_Y - 0.25, 0]}>
+          <cylinderGeometry args={[1.75, 1.05, 0.5, 24]} />
+          <meshStandardMaterial color={IRON_RED} metalness={0.3} roughness={0.5} />
+        </mesh>
+        <mesh position={[0, GALLERY_Y + 0.1, 0]}>
+          <cylinderGeometry args={[1.8, 1.8, 0.2, 24]} />
+          <meshStandardMaterial color={IRON_RED} metalness={0.3} roughness={0.5} />
+        </mesh>
+        {/* Gallery railing: top and middle rails on posts */}
+        {[0.55, 1.05].map((ry) => (
+          <mesh key={ry} position={[0, GALLERY_Y + 0.2 + ry, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[1.72, 0.035, 6, 32]} />
+            <meshStandardMaterial color={IRON_RED} metalness={0.5} roughness={0.4} />
           </mesh>
         ))}
-        {/* Lantern room */}
-        <mesh position={[0, TOWER_HEIGHT + 1.3, 0]}>
-          <cylinderGeometry args={[1.1, 1.1, 2, 12]} />
+        {Array.from({ length: 16 }, (_, i) => (i / 16) * Math.PI * 2).map((a) => (
+          <mesh key={a} position={[Math.sin(a) * 1.72, GALLERY_Y + 0.725, Math.cos(a) * 1.72]}>
+            <cylinderGeometry args={[0.03, 0.03, 1.05, 4]} />
+            <meshStandardMaterial color={IRON_RED} metalness={0.5} roughness={0.4} />
+          </mesh>
+        ))}
+        {/* Lantern: solid parapet, glazing with mullions, domed roof and ventilator ball */}
+        <mesh position={[0, GALLERY_Y + 0.2 + PARAPET_HEIGHT / 2, 0]}>
+          <cylinderGeometry args={[1.0, 1.0, PARAPET_HEIGHT, 16]} />
+          <meshStandardMaterial color={IRON_RED} metalness={0.3} roughness={0.5} />
+        </mesh>
+        <mesh position={[0, GLAZING_Y + GLAZING_HEIGHT / 2, 0]}>
+          <cylinderGeometry args={[0.92, 0.92, GLAZING_HEIGHT, 16]} />
           <meshStandardMaterial
             color={isNight ? '#fff6d8' : '#9fb3b8'}
             emissive={isNight ? '#ffe9a8' : '#000000'}
@@ -175,13 +212,31 @@ export function Lighthouse({ night: isNight }: LighthouseProps) {
             roughness={0.15}
           />
         </mesh>
-        <mesh position={[0, TOWER_HEIGHT + 2.75, 0]}>
-          <coneGeometry args={[1.4, 1, 12]} />
-          <meshStandardMaterial color="#8a1d17" roughness={0.5} />
+        {Array.from({ length: 8 }, (_, i) => (i / 8) * Math.PI * 2).map((a) => (
+          <mesh
+            key={a}
+            position={[Math.sin(a) * 0.94, GLAZING_Y + GLAZING_HEIGHT / 2, Math.cos(a) * 0.94]}
+            rotation={[0, a, 0]}
+          >
+            <boxGeometry args={[0.07, GLAZING_HEIGHT, 0.05]} />
+            <meshStandardMaterial color={IRON_RED} metalness={0.4} roughness={0.5} />
+          </mesh>
+        ))}
+        <mesh position={[0, ROOF_Y + 0.06, 0]}>
+          <cylinderGeometry args={[1.12, 1.12, 0.12, 16]} />
+          <meshStandardMaterial color={IRON_RED} metalness={0.3} roughness={0.5} />
         </mesh>
-        <mesh position={[0, TOWER_HEIGHT + 3.4, 0]}>
-          <sphereGeometry args={[0.3, 8, 8]} />
-          <meshStandardMaterial color="#8a1d17" roughness={0.5} />
+        <mesh position={[0, ROOF_Y + 0.12, 0]}>
+          <sphereGeometry args={[1.05, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color={IRON_RED} metalness={0.3} roughness={0.45} />
+        </mesh>
+        <mesh position={[0, ROOF_Y + 1.35, 0]}>
+          <sphereGeometry args={[0.22, 10, 8]} />
+          <meshStandardMaterial color={IRON_RED} metalness={0.3} roughness={0.45} />
+        </mesh>
+        <mesh position={[0, ROOF_Y + 1.75, 0]}>
+          <coneGeometry args={[0.05, 0.6, 6]} />
+          <meshStandardMaterial color="#2a2422" metalness={0.6} roughness={0.4} />
         </mesh>
       </group>
 
