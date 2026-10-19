@@ -5,7 +5,6 @@ import {
   TERRAIN_BOUNDS,
   FORT_POSITION,
   FORT_GROUND,
-  SPUR,
   LARGO,
   BREAKWATER,
   FUNICULAR,
@@ -142,60 +141,13 @@ function createTerrainGeometry() {
   return geo;
 }
 
-/** Low scrub on the dunes behind Praia do Norte */
-function createVegetation() {
-  const rand = createRandom(1987);
-  const shrubs: InstanceSpec[] = [];
-  const shrubDark = new THREE.Color('#4f5733');
-  const shrubLight = new THREE.Color('#7d8050');
-
-  for (let attempt = 0; attempt < 12000 && shrubs.length < 2400; attempt++) {
-    const x = lerp(-165, TERRAIN_BOUNDS.maxX - 20, rand());
-    const z = lerp(160, 320, rand());
-    const d = z - shoreZ(x);
-    if (d < 38 || d > 110) continue;
-    if (plateauDistance(x, z) > -12) continue;
-    if (fbm(x * 0.04, z * 0.04, 3) < -0.1) continue;
-    const size = 0.5 + rand() * 1.1;
-    shrubs.push({
-      position: new THREE.Vector3(x, terrainHeight(x, z) - 0.1, z),
-      rotationY: rand() * Math.PI,
-      scale: new THREE.Vector3(size * 1.2, size * 0.8, size),
-      color: shrubDark.clone().lerp(shrubLight, rand()),
-    });
-  }
-
-  const shrubGeo = new THREE.IcosahedronGeometry(1, 0);
-  const foliage = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true });
-
-  return [createInstancedMesh(shrubGeo, foliage, shrubs)];
-}
-
-/** Boulders at the foot of the headland cliffs */
+/** Armour stones along both flanks and around the head of the harbour breakwater */
 function createRocks() {
   const rand = createRandom(2013);
   const rocks: InstanceSpec[] = [];
   const dark = new THREE.Color('#4e4840');
   const light = new THREE.Color('#857b6c');
 
-  for (let attempt = 0; attempt < 50000 && rocks.length < 520; attempt++) {
-    const x = lerp(-540, -150, rand());
-    const z = lerp(-10, 340, rand());
-    const y = terrainHeight(x, z);
-    if (y < -5 || y > 4) continue;
-    // Only where the cliffs meet the sea, not out on the open beach
-    if (plateauDistance(x, z) < -30 && Math.hypot((x - SPUR.x) / SPUR.rx, (z - SPUR.z) / SPUR.rz) > 1.4) continue;
-    const size = 1 + rand() * rand() * 5;
-    rocks.push({
-      position: new THREE.Vector3(x, y - size * 0.3, z),
-      rotationY: 0,
-      tilt: new THREE.Euler(rand() * Math.PI, rand() * Math.PI, rand() * Math.PI),
-      scale: new THREE.Vector3(size * (0.8 + rand() * 0.6), size * (0.5 + rand() * 0.4), size * (0.8 + rand() * 0.6)),
-      color: dark.clone().lerp(light, rand()),
-    });
-  }
-
-  // Armour stones along both flanks and around the head of the harbour breakwater
   const bwShore = shoreZ(BREAKWATER.x);
   for (let z = bwShore + 10; z > bwShore - BREAKWATER.length - 6; z -= 2.2) {
     const tip = z < bwShore - BREAKWATER.length + 4;
@@ -372,15 +324,14 @@ function Ermida() {
 
 export function Coast({ config, night }: CoastProps) {
   const terrainGeometry = useMemo(() => createTerrainGeometry(), []);
-  const vegetation = useMemo(() => createVegetation(), []);
   const rocks = useMemo(() => createRocks(), []);
   const village = useMemo(() => createVillage(), []);
   const villageLights = useMemo(() => createLightPoints(village.lights), [village]);
 
   useEffect(() => () => {
     terrainGeometry.dispose();
-    [...vegetation, rocks, ...village.meshes, villageLights].forEach(disposeObject);
-  }, [terrainGeometry, vegetation, rocks, village, villageLights]);
+    [rocks, ...village.meshes, villageLights].forEach(disposeObject);
+  }, [terrainGeometry, rocks, village, villageLights]);
 
   // In wireframe mode the seabed is clipped away so it doesn't clutter the grid
   const clippingPlanes = useMemo(
@@ -393,7 +344,6 @@ export function Coast({ config, night }: CoastProps) {
       <mesh geometry={terrainGeometry}>
         <meshStandardMaterial vertexColors roughness={0.95} metalness={0} clippingPlanes={clippingPlanes} />
       </mesh>
-      {vegetation.map((mesh) => <primitive key={mesh.uuid} object={mesh} />)}
       <primitive object={rocks} />
       {village.meshes.map((mesh) => <primitive key={mesh.uuid} object={mesh} />)}
       {night && <primitive object={villageLights} />}
