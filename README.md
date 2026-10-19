@@ -83,7 +83,7 @@ All wave parameters can be configured in one place: `src/config/waveConfig.ts`
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `wireframe` | Display as wireframe grid mesh | true |
+| `wireframe` | Display as wireframe grid mesh | false |
 | `animateWaves` | Enable natural wave movement | true |
 | `timeScale` | Animation speed multiplier | 1.0 |
 

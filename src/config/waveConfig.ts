@@ -44,7 +44,7 @@ export interface WaveConfig {
   liveSky: boolean;          // Follow the current Nazaré time instead of timeOfDay slider (default: true)
 
   // Display
-  wireframe: boolean;        // Display as wireframe grid mesh (default: true)
+  wireframe: boolean;        // Display as wireframe grid mesh (default: false)
   animateWaves: boolean;     // Enable natural wave movement (default: true)
   waveColor: string;         // Color of the wireframe grid (hex string); solid water uses a realistic palette
   showCoast: boolean;        // Show the Nazaré coast: Praia do Norte, cliffs, fort & lighthouse (default: true)
@@ -87,7 +87,7 @@ export const defaultWaveConfig: WaveConfig = {
   liveSky: true,
 
   // Display
-  wireframe: true,           // Grid mesh by default
+  wireframe: false,          // Solid water by default
   animateWaves: true,        // Natural wave movement by default
   waveColor: '#3be1f7',      // Cyan color by default
   showCoast: true,           // Coastline visible by default
