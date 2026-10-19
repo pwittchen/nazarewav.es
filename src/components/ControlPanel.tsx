@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { WaveConfig } from '../config/waveConfig';
 import { configLimits, wavePresets } from '../config/waveConfig';
 import { dayPhaseLabels, nazareLocalHour, weatherLabel, type SkyState } from '../utils/sky';
@@ -92,7 +92,47 @@ function formatTime(hours: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
-type SectionKey = 'waves' | 'wind' | 'canyon' | 'sky' | 'visual';
+function embedSnippet(): string {
+  const src = `${window.location.origin}${window.location.pathname}?embed`;
+  return `<iframe src="${src}" title="Nazaré Waves Simulator" width="100%" height="600" style="border:0;border-radius:8px" allow="fullscreen" loading="lazy"></iframe>`;
+}
+
+function EmbedSnippet() {
+  const [snippet] = useState(embedSnippet);
+  const [copied, setCopied] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(snippet);
+    } catch {
+      // Clipboard API unavailable (e.g. insecure context): fall back to selection
+      textareaRef.current?.select();
+      document.execCommand('copy');
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="embed-snippet">
+      <span className="info-text">Put the simulator on your page with this iframe:</span>
+      <textarea
+        ref={textareaRef}
+        className="embed-code"
+        value={snippet}
+        readOnly
+        rows={4}
+        onFocus={(e) => e.target.select()}
+      />
+      <button className="embed-copy" onClick={copy}>
+        {copied ? 'Copied!' : 'Copy snippet'}
+      </button>
+    </div>
+  );
+}
+
+type SectionKey = 'waves' | 'wind' | 'canyon' | 'sky' | 'visual' | 'embed';
 
 export function ControlPanel({ config, sky, onChange, isOpen: controlledIsOpen, onOpenChange }: ControlPanelProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(() => window.innerWidth >= 640);
@@ -112,6 +152,7 @@ export function ControlPanel({ config, sky, onChange, isOpen: controlledIsOpen, 
     canyon: false,
     sky: false,
     visual: true,
+    embed: false,
   });
 
   const updateConfig = <K extends keyof WaveConfig>(key: K, value: WaveConfig[K]) => {
@@ -442,6 +483,29 @@ export function ControlPanel({ config, sky, onChange, isOpen: controlledIsOpen, 
                 {...configLimits.waterClarity}
                 onChange={(v) => updateConfig('waterClarity', v)}
               />
+            </div>
+          )}
+        </div>
+
+        {/* Embed Section */}
+        <div className="section">
+          <button className="section-header" onClick={() => toggleSection('embed')}>
+            <span>Embed</span>
+            <svg
+              className={`chevron ${expandedSections.embed ? 'expanded' : ''}`}
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+          {expandedSections.embed && (
+            <div className="section-content">
+              <EmbedSnippet />
             </div>
           )}
         </div>
