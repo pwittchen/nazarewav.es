@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Scene } from './components/Scene';
 import { ControlPanel } from './components/ControlPanel';
 import { ForecastPanel } from './components/ForecastPanel';
@@ -9,6 +9,7 @@ import {
   findNearestForecast,
   applyForecastToConfig,
 } from './utils/forecast';
+import { computeSky, nazareLocalHour } from './utils/sky';
 import './App.css';
 
 function App() {
@@ -23,10 +24,25 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Apply theme to document for CSS variable switching
+  const sky = useMemo(
+    () => computeSky(config.timeOfDay, config.cloudCover),
+    [config.timeOfDay, config.cloudCover]
+  );
+  const theme = sky.isNight ? 'dark' : 'light';
+
+  // UI theme follows the time of day (CSS variable switching)
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', config.theme);
-  }, [config.theme]);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  // In live mode the sky tracks the current time in Nazaré
+  useEffect(() => {
+    if (!config.liveSky) return;
+    const tick = () => setConfig(current => ({ ...current, timeOfDay: nazareLocalHour() }));
+    tick();
+    const interval = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(interval);
+  }, [config.liveSky]);
 
   // On startup, fetch forecast and apply the nearest entry to current time
   useEffect(() => {
@@ -56,7 +72,7 @@ function App() {
       </header>
 
       <main className="app-main">
-        <Scene config={config} />
+        <Scene config={config} sky={sky} />
         <ForecastPanel
           config={config}
           onChange={setConfig}
@@ -65,6 +81,7 @@ function App() {
         {!(isMobile && forecastPanelOpen) && (
           <ControlPanel
             config={config}
+            sky={sky}
             onChange={setConfig}
             {...(isMobile ? { isOpen: controlPanelOpen, onOpenChange: handleControlPanelOpenChange } : {})}
           />

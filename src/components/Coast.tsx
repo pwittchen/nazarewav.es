@@ -18,6 +18,7 @@ import { Lighthouse } from './Lighthouse';
 
 interface CoastProps {
   config: WaveConfig;
+  night: boolean;
 }
 
 const TERRAIN_SPACING = 3; // meters between terrain vertices
@@ -378,7 +379,7 @@ function Ermida() {
   );
 }
 
-export function Coast({ config }: CoastProps) {
+export function Coast({ config, night }: CoastProps) {
   const terrainGeometry = useMemo(() => createTerrainGeometry(), []);
   const vegetation = useMemo(() => createVegetation(), []);
   const rocks = useMemo(() => createRocks(), []);
@@ -409,7 +410,7 @@ export function Coast({ config }: CoastProps) {
       {village.map((mesh) => <primitive key={mesh.uuid} object={mesh} />)}
       <Sanctuary />
       <Ermida />
-      <Lighthouse theme={config.theme} />
+      <Lighthouse night={night} />
     </group>
   );
 }

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import type { WaveConfig } from '../config/waveConfig';
 import { configLimits, wavePresets } from '../config/waveConfig';
+import { dayPhaseLabels, nazareLocalHour, weatherLabel, type SkyState } from '../utils/sky';
 
 interface ControlPanelProps {
   config: WaveConfig;
+  sky: SkyState;
   onChange: (config: WaveConfig) => void;
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -16,16 +18,17 @@ interface SliderProps {
   max: number;
   step: number;
   unit?: string;
+  format?: (value: number) => string;
   onChange: (value: number) => void;
 }
 
-function Slider({ label, value, min, max, step, unit = '', onChange }: SliderProps) {
+function Slider({ label, value, min, max, step, unit = '', format, onChange }: SliderProps) {
   return (
     <div className="slider-group">
       <div className="slider-header">
         <label>{label}</label>
         <span className="slider-value">
-          {value.toFixed(step < 1 ? 1 : 0)}{unit}
+          {format ? format(value) : `${value.toFixed(step < 1 ? 1 : 0)}${unit}`}
         </span>
       </div>
       <input
@@ -84,9 +87,14 @@ function ColorPicker({ label, value, onChange }: ColorPickerProps) {
   );
 }
 
-type SectionKey = 'waves' | 'wind' | 'canyon' | 'visual';
+function formatTime(hours: number): string {
+  const total = Math.round(hours * 60) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
 
-export function ControlPanel({ config, onChange, isOpen: controlledIsOpen, onOpenChange }: ControlPanelProps) {
+type SectionKey = 'waves' | 'wind' | 'canyon' | 'sky' | 'visual';
+
+export function ControlPanel({ config, sky, onChange, isOpen: controlledIsOpen, onOpenChange }: ControlPanelProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(() => window.innerWidth >= 640);
 
   const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
@@ -102,6 +110,7 @@ export function ControlPanel({ config, onChange, isOpen: controlledIsOpen, onOpe
     waves: true,
     wind: false,
     canyon: false,
+    sky: false,
     visual: true,
   });
 
@@ -119,8 +128,10 @@ export function ControlPanel({ config, onChange, isOpen: controlledIsOpen, onOpe
       wireframe: config.wireframe,
       animateWaves: config.animateWaves,
       waveColor: config.waveColor,
-      theme: config.theme,
       showCoast: config.showCoast,
+      timeOfDay: config.timeOfDay,
+      cloudCover: config.cloudCover,
+      liveSky: config.liveSky,
     });
   };
 
@@ -329,6 +340,50 @@ export function ControlPanel({ config, onChange, isOpen: controlledIsOpen, onOpe
           )}
         </div>
 
+        {/* Sky & Weather Section */}
+        <div className="section">
+          <button className="section-header" onClick={() => toggleSection('sky')}>
+            <span>Sky &amp; Weather</span>
+            <svg
+              className={`chevron ${expandedSections.sky ? 'expanded' : ''}`}
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+          {expandedSections.sky && (
+            <div className="section-content">
+              <Toggle
+                label="Live Nazaré Time"
+                checked={config.liveSky}
+                onChange={(v) => onChange({ ...config, liveSky: v, ...(v ? { timeOfDay: nazareLocalHour() } : {}) })}
+              />
+              <Slider
+                label="Time of Day"
+                value={config.timeOfDay}
+                {...configLimits.timeOfDay}
+                format={formatTime}
+                onChange={(v) => onChange({ ...config, timeOfDay: v, liveSky: false })}
+              />
+              <Slider
+                label="Cloud Cover"
+                value={config.cloudCover}
+                {...configLimits.cloudCover}
+                format={(v) => `${Math.round(v * 100)}%`}
+                onChange={(v) => updateConfig('cloudCover', v)}
+              />
+              <span className="info-text">
+                {dayPhaseLabels[sky.phase]} · {weatherLabel(config.cloudCover)} · sun {Math.round(sky.sunElevation)}°
+              </span>
+            </div>
+          )}
+        </div>
+
         {/* Visual Parameters Section */}
         <div className="section">
           <button className="section-header" onClick={() => toggleSection('visual')}>
@@ -348,11 +403,6 @@ export function ControlPanel({ config, onChange, isOpen: controlledIsOpen, onOpe
           {expandedSections.visual && (
             <div className="section-content">
               <Toggle
-                label="Dark Theme"
-                checked={config.theme === 'dark'}
-                onChange={(v) => updateConfig('theme', v ? 'dark' : 'light')}
-              />
-              <Toggle
                 label="Animate Waves"
                 checked={config.animateWaves}
                 onChange={(v) => updateConfig('animateWaves', v)}
@@ -367,11 +417,13 @@ export function ControlPanel({ config, onChange, isOpen: controlledIsOpen, onOpe
                 checked={config.wireframe}
                 onChange={(v) => updateConfig('wireframe', v)}
               />
-              <ColorPicker
-                label="Wave Color"
-                value={config.waveColor}
-                onChange={(v) => updateConfig('waveColor', v)}
-              />
+              {config.wireframe && (
+                <ColorPicker
+                  label="Grid Color"
+                  value={config.waveColor}
+                  onChange={(v) => updateConfig('waveColor', v)}
+                />
+              )}
               <Slider
                 label="Foam Threshold"
                 value={config.foamThreshold}

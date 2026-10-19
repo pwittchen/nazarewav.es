@@ -9,12 +9,28 @@ export interface ForecastEntry {
   waveDirection: number;
   windSpeed: number;
   windDirection: number;
+  cloudCover: number;        // Combined cloud cover (0-1)
+  rain: number;              // Precipitation in mm/h
 }
 
 interface WindData {
   datetime: string;
   windSpeed: number;
   windDirection: number;
+  cloudCover: number;
+  rain: number;
+}
+
+// Windguru reports "-" for missing values
+function parseValue(value: string | undefined): number {
+  const n = parseFloat(value ?? '');
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Combine high/medium/low cloud layers (%) into one cover value. Low clouds hide the
+// sky the most, thin high cirrus the least; layers overlap randomly.
+function combineCloudLayers(high: number, mid: number, low: number): number {
+  return 1 - (1 - low / 100) * (1 - 0.85 * mid / 100) * (1 - 0.5 * high / 100);
 }
 
 // CORS proxies, tried in order. r.jina.ai returns the page as plain text
@@ -44,14 +60,18 @@ function parseWindguruText(waveText: string, windText: string): ForecastEntry[] 
     const windLines = windContent.split('\n');
 
     for (const line of windLines) {
-      const match = line.match(/^\s*(\w{3})\s+(\d+)\.\s+(\d+)h\s+(\d+)\s+\d+\s+\w+\s+(\d+)/);
+      const match = line.match(/^\s*(\w{3})\s+(\d+)\.\s+(\d+)h\s+(\d+)\s+\d+\s+\w+\s+(\d+)(.*)$/);
       if (match) {
-        const [, dayName, dayNum, hourStr, windSpeedStr, windDirStr] = match;
+        const [, dayName, dayNum, hourStr, windSpeedStr, windDirStr, rest] = match;
         const key = `${dayName} ${dayNum}. ${hourStr}h`;
+        // Remaining columns: TMP SLP HCLD MCLD LCLD APCP APCP1 RH
+        const [, , high, mid, low, , rain1h] = rest.trim().split(/\s+/);
         windDataMap.set(key, {
           datetime: key,
           windSpeed: parseInt(windSpeedStr),
           windDirection: parseInt(windDirStr),
+          cloudCover: combineCloudLayers(parseValue(high), parseValue(mid), parseValue(low)),
+          rain: parseValue(rain1h),
         });
       }
     }
@@ -75,6 +95,8 @@ function parseWindguruText(waveText: string, windText: string): ForecastEntry[] 
           waveDirection: parseInt(waveDirStr),
           windSpeed: windData?.windSpeed || 10,
           windDirection: windData?.windDirection || 45,
+          cloudCover: windData?.cloudCover ?? 0.2,
+          rain: windData?.rain ?? 0,
         });
       }
     }
@@ -141,6 +163,8 @@ function generateFallbackForecast(): ForecastEntry[] {
         waveDirection: Math.round(280 + Math.sin(d) * 40),
         windSpeed: Math.round((5 + variation * 20) * 10) / 10,
         windDirection: Math.round(45 + Math.cos(d * 0.5) * 40),
+        cloudCover: Math.round((0.5 + Math.sin(d * 1.3 + h * 0.2) * 0.45) * 100) / 100,
+        rain: 0,
       });
     }
   }
@@ -252,5 +276,7 @@ export function applyForecastToConfig(
     windSpeed: windSpeedMs,
     windDirection: entry.windDirection,
     windChopIntensity: Math.min(1, windSpeedMs / 15),
+    // Rain only falls from a mostly covered sky
+    cloudCover: entry.rain > 0 ? Math.max(entry.cloudCover, 0.85) : entry.cloudCover,
   };
 }

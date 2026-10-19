@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WaveConfig } from '../config/waveConfig';
 import { createShoreMapData, SHORE_MAP_BOUNDS, SHORE_MAP_SEABED_RANGE } from '../utils/terrain';
+import { waterAlbedo, waterPalette, WATER_ROUGHNESS } from '../utils/sky';
 
 interface FarOceanProps {
   config: WaveConfig;
@@ -71,6 +72,11 @@ export function FarOcean({ config, timeRef }: FarOceanProps) {
     uShoreMap: { value: shoreMap },
     uShoreBounds: { value: new THREE.Vector3(SHORE_MAP_BOUNDS.minX, SHORE_MAP_BOUNDS.minZ, SHORE_MAP_BOUNDS.size) },
     uSeabedRange: { value: new THREE.Vector2(SHORE_MAP_SEABED_RANGE.min, SHORE_MAP_SEABED_RANGE.max) },
+    uWaterDeep: { value: waterPalette.deep },
+    uWaterShallow: { value: waterPalette.shallow },
+    uWaterCrest: { value: waterPalette.crest },
+    uWaterMurky: { value: waterPalette.murky },
+    uClarity: { value: 1 },
   }), [shoreMap]);
 
   const material = useMemo(() => {
@@ -91,6 +97,8 @@ export function FarOcean({ config, timeRef }: FarOceanProps) {
           uniform vec2 uSeabedRange;
           varying float vFoam;
           varying vec2 vXZ;
+          varying float vShallow;
+          varying float vCrest;
         `)
         .replace('#include <beginnormal_vertex>', `
           float px = position.x;
@@ -157,17 +165,36 @@ export function FarOcean({ config, timeRef }: FarOceanProps) {
           float surfLines = pow(0.5 + 0.5 * sin(pPhase * 2.0), 3.0);
           foam = max(foam, surfBand * (0.35 + 0.65 * surfLines) * (0.4 + uFoam.y * 0.6));
           vFoam = foam * uFoam.w;
+
+          // Water body shading inputs (mirrors WaveMesh / waterShallowness)
+          vShallow = shore.g < 0.01 ? 0.0 : 1.0 - smoothstep(2.0, 25.0, depth);
+          vCrest = clamp(waveY / (uFoam.z * 1.5 + 0.5), 0.0, 1.0);
         `)
         .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position.x, waveY, position.z);');
 
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
+          uniform vec4 uFoam;
+          uniform vec3 uWaterDeep;
+          uniform vec3 uWaterShallow;
+          uniform vec3 uWaterCrest;
+          uniform vec3 uWaterMurky;
+          uniform float uClarity;
           varying float vFoam;
           varying vec2 vXZ;
+          varying float vShallow;
+          varying float vCrest;
         `)
         .replace('#include <color_fragment>', `#include <color_fragment>
           // The main wave mesh covers the centre (slight overlap hides the seam)
           if (abs(vXZ.x) < 148.5 && abs(vXZ.y) < 148.5) discard;
+          // Same blend as waterAlbedo() in utils/sky.ts (solid mode only)
+          if (uFoam.w > 0.5) {
+            vec3 water = mix(uWaterDeep, uWaterShallow, vShallow * 0.85);
+            water = mix(water, uWaterCrest, vCrest * 0.6);
+            water = mix(water, uWaterMurky, (1.0 - uClarity) * 0.45);
+            diffuseColor.rgb = water;
+          }
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), vFoam);
         `);
     };
@@ -182,30 +209,25 @@ export function FarOcean({ config, timeRef }: FarOceanProps) {
     material.dispose();
   }, [geometry, horizonGeometry, shoreMap, material]);
 
-  // Water color with the same turbidity tint as WaveMesh
-  const waterColor = useMemo(() => {
-    const color = new THREE.Color(config.waveColor);
-    const murkiness = 1 - config.waterClarity;
-    return new THREE.Color(
-      color.r * (1 - murkiness * 0.3),
-      Math.min(1, color.g * (1 + murkiness * 0.1)),
-      color.b * (1 - murkiness * 0.2)
-    );
-  }, [config.waveColor, config.waterClarity]);
+  // Open-sea color for the flat horizon ring (deep water, no crests)
+  const waterColor = useMemo(
+    () => waterAlbedo(new THREE.Color(), 0, 0, config.waterClarity),
+    [config.waterClarity]
+  );
 
   const opacity = config.wireframe ? 1 : 0.85 + config.waterClarity * 0.15;
 
   useEffect(() => {
     material.wireframe = config.wireframe;
-    material.color.set(config.wireframe ? config.waveColor : waterColor);
+    material.color.set(config.wireframe ? config.waveColor : '#ffffff');
     material.emissive.set(config.wireframe ? config.waveColor : '#000000');
     material.emissiveIntensity = config.wireframe ? 0.2 : 0;
-    material.metalness = config.wireframe ? 0 : 0.1;
-    material.roughness = config.wireframe ? 1 : 0.3 - config.waterClarity * 0.2;
+    material.metalness = 0;
+    material.roughness = config.wireframe ? 1 : WATER_ROUGHNESS;
     material.transparent = !config.wireframe;
     material.opacity = opacity;
     material.needsUpdate = true;
-  }, [material, config.wireframe, config.waveColor, config.waterClarity, waterColor, opacity]);
+  }, [material, config.wireframe, config.waveColor, opacity]);
 
   useFrame(() => {
     const gravity = 9.8;
@@ -232,6 +254,7 @@ export function FarOcean({ config, timeRef }: FarOceanProps) {
     );
     uniforms.uCanyon.value.set(config.canyonAmplification, config.canyonFocusWidth, config.canyonDepthEffect);
     uniforms.uFoam.value.set(config.foamThreshold, config.foamIntensity, config.waveHeight, config.wireframe ? 0 : 1);
+    uniforms.uClarity.value = config.waterClarity;
   });
 
   return (
@@ -241,8 +264,8 @@ export function FarOcean({ config, timeRef }: FarOceanProps) {
         <mesh geometry={horizonGeometry} position={[0, 0, 0]}>
           <meshStandardMaterial
             color={waterColor}
-            metalness={0.1}
-            roughness={0.3 - config.waterClarity * 0.2}
+            metalness={0}
+            roughness={WATER_ROUGHNESS}
             transparent
             opacity={opacity}
           />

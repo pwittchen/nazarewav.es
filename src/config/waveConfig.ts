@@ -8,6 +8,8 @@
  * an underwater canyon that focuses and amplifies wave energy.
  */
 
+import { nazareLocalHour } from '../utils/sky';
+
 export interface WaveConfig {
   // Wave Parameters
   waveHeight: number;        // Base wave height in meters (typical: 1-30m for Nazaré)
@@ -36,11 +38,15 @@ export interface WaveConfig {
   foamIntensity: number;     // Amount of foam/whitecaps (0-1)
   waterClarity: number;      // Water clarity/turbidity (0-1)
 
+  // Sky & Weather (UI theme follows: dark at night, light in daylight)
+  timeOfDay: number;         // Local Nazaré time in hours (0-24), drives the sun position
+  cloudCover: number;        // Cloud cover (0 = clear sky, 1 = overcast)
+  liveSky: boolean;          // Follow the current Nazaré time instead of timeOfDay slider (default: true)
+
   // Display
   wireframe: boolean;        // Display as wireframe grid mesh (default: true)
   animateWaves: boolean;     // Enable natural wave movement (default: true)
-  waveColor: string;         // Color of the wave mesh (hex string)
-  theme: 'dark' | 'light';   // UI and scene color theme (default: dark)
+  waveColor: string;         // Color of the wireframe grid (hex string); solid water uses a realistic palette
   showCoast: boolean;        // Show the Nazaré coast: Praia do Norte, cliffs, fort & lighthouse (default: true)
 
   // Animation
@@ -75,11 +81,15 @@ export const defaultWaveConfig: WaveConfig = {
   foamIntensity: 0.5,
   waterClarity: 0.7,
 
+  // Sky & Weather
+  timeOfDay: nazareLocalHour(),
+  cloudCover: 0.2,
+  liveSky: true,
+
   // Display
   wireframe: true,           // Grid mesh by default
   animateWaves: true,        // Natural wave movement by default
   waveColor: '#3be1f7',      // Cyan color by default
-  theme: 'dark',             // Dark theme by default
   showCoast: true,           // Coastline visible by default
 
   // Animation
@@ -141,5 +151,7 @@ export const configLimits = {
   foamThreshold: { min: 0, max: 1, step: 0.05 },
   foamIntensity: { min: 0, max: 1, step: 0.05 },
   waterClarity: { min: 0, max: 1, step: 0.05 },
+  timeOfDay: { min: 0, max: 24, step: 0.25 },
+  cloudCover: { min: 0, max: 1, step: 0.05 },
   timeScale: { min: 0.1, max: 3, step: 0.1 },
 } as const;

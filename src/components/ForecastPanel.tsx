@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { weatherLabel } from '../utils/sky';
 import type { WaveConfig } from '../config/waveConfig';
 import {
   fetchForecastData,
@@ -95,8 +96,12 @@ export function ForecastPanel({ config, onChange, isOpen: controlledIsOpen, onOp
     }
   }, [isOpen]);
 
-  const applyForecast = (entry: ForecastEntry) => {
-    onChange(applyForecastToConfig(config, entry));
+  // A picked forecast hour also sets the sky to that hour; "now" goes back to live time
+  const applyForecast = (entry: ForecastEntry, live = false) => {
+    onChange({
+      ...applyForecastToConfig(config, entry),
+      ...(live ? { liveSky: true } : { liveSky: false, timeOfDay: entry.hour }),
+    });
   };
 
   const selectedEntry = forecast.entries[selectedIndex];
@@ -220,6 +225,12 @@ export function ForecastPanel({ config, onChange, isOpen: controlledIsOpen, onOp
                   <span className="detail-label">Wind Dir</span>
                   <span className="detail-value">{selectedEntry.windDirection}° ({degreesToCompass(selectedEntry.windDirection)})</span>
                 </div>
+                <div className="detail-item">
+                  <span className="detail-label">Sky</span>
+                  <span className="detail-value">
+                    {weatherLabel(selectedEntry.cloudCover)}{selectedEntry.rain > 0 ? `, rain ${selectedEntry.rain} mm/h` : ''}
+                  </span>
+                </div>
                 <button
                   className="detail-item detail-item-button"
                   onClick={() => {
@@ -230,7 +241,7 @@ export function ForecastPanel({ config, onChange, isOpen: controlledIsOpen, onOp
                         setSelectedIndex(idx);
                         setSelectedDay(nearest.dayName);
                       }
-                      applyForecast(nearest);
+                      applyForecast(nearest, true);
                     }
                   }}
                   title="Apply current forecast (nearest to now)"

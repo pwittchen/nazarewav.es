@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { FORT_POSITION, FORT_GROUND } from '../utils/terrain';
 
 interface LighthouseProps {
-  theme: 'dark' | 'light';
+  night: boolean; // Beam and lantern on
 }
 
 // Fort outline in local coordinates (x = north, z = east / inland)
@@ -62,9 +62,8 @@ const beamFragmentShader = `
 /**
  * Forte de São Miguel Arcanjo with the red square tower of the Farol da Nazaré.
  */
-export function Lighthouse({ theme }: LighthouseProps) {
+export function Lighthouse({ night: isNight }: LighthouseProps) {
   const beamRef = useRef<THREE.Group>(null);
-  const isNight = theme === 'dark';
 
   const walls = useMemo(() => createWallGeometry(0.8, WALL_TOP - WALL_BASE), []);
   const coping = useMemo(() => createWallGeometry(0.8, 0.5), []);

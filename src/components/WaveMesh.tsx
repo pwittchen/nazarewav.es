@@ -1,9 +1,10 @@
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WaveConfig } from '../config/waveConfig';
 import { terrainHeight, shoreAttenuation, waveDamping, surfFoam } from '../utils/terrain';
 import { FarOcean } from './FarOcean';
+import { waterAlbedo, waterShallowness, WATER_ROUGHNESS } from '../utils/sky';
 
 interface WaveMeshProps {
   config: WaveConfig;
@@ -30,31 +31,22 @@ export function WaveMesh({ config }: WaveMeshProps) {
     return new Float32Array(geometry.attributes.position.array);
   }, [geometry]);
 
-  // Seabed height and swell attenuation per vertex (waves die out over the shallows)
+  // Seabed height, swell attenuation and water shallowness per vertex (waves die out over the shallows)
   const shoreData = useMemo(() => {
     const count = originalPositions.length / 3;
     const seabed = new Float32Array(count);
     const attenuation = new Float32Array(count);
+    const shallowness = new Float32Array(count);
     for (let v = 0; v < count; v++) {
       seabed[v] = terrainHeight(originalPositions[v * 3], originalPositions[v * 3 + 2]);
       attenuation[v] = shoreAttenuation(seabed[v]);
+      shallowness[v] = waterShallowness(-seabed[v]);
     }
-    return { seabed, attenuation };
+    return { seabed, attenuation, shallowness };
   }, [originalPositions]);
 
-  // Parse base wave color for blending with foam
-  const baseColor = useMemo(() => {
-    const color = new THREE.Color(config.waveColor);
-    return { r: color.r, g: color.g, b: color.b };
-  }, [config.waveColor]);
-
-  // Update base color when waveColor changes
-  useEffect(() => {
-    const color = new THREE.Color(config.waveColor);
-    baseColor.r = color.r;
-    baseColor.g = color.g;
-    baseColor.b = color.b;
-  }, [config.waveColor, baseColor]);
+  // Scratch color for the per-vertex water albedo
+  const water = useMemo(() => new THREE.Color(), []);
 
   useFrame((_, delta) => {
     if (!meshRef.current) return;
@@ -78,9 +70,6 @@ export function WaveMesh({ config }: WaveMeshProps) {
     // Wind speed affects chop intensity (Beaufort scale approximation)
     // windSpeed in m/s, higher wind = more chop
     const windChopMultiplier = config.windChopIntensity * (1 + config.windSpeed / 20);
-
-    // Water clarity affects color saturation (turbid water = less saturated, greener)
-    const clarityFactor = config.waterClarity;
 
     // Precompute direction values
     const primaryDir = (config.waveDirection * Math.PI) / 180;
@@ -187,17 +176,15 @@ export function WaveMesh({ config }: WaveMeshProps) {
         foamAmount = Math.max(foamAmount, surf);
       }
 
-      // Apply water clarity to base color
-      // Lower clarity = more green/murky tint
-      const murkiness = 1 - clarityFactor;
-      const turbidR = baseColor.r * (1 - murkiness * 0.3);
-      const turbidG = baseColor.g * (1 + murkiness * 0.1);
-      const turbidB = baseColor.b * (1 - murkiness * 0.2);
+      // Water body: deep blue-green, teal over the shallows, lighter through crests, murkier when turbid
+      const shallow = config.showCoast ? shoreData.shallowness[vertexIndex] : 0;
+      const crest = Math.min(1, Math.max(0, totalHeight / (config.waveHeight * 1.5 + 0.5)));
+      waterAlbedo(water, shallow, crest, config.waterClarity);
 
       // Blend between water color and white foam
-      colors[vertexIndex * 3] = turbidR + (1 - turbidR) * foamAmount;
-      colors[vertexIndex * 3 + 1] = turbidG + (1 - turbidG) * foamAmount;
-      colors[vertexIndex * 3 + 2] = turbidB + (1 - turbidB) * foamAmount;
+      colors[vertexIndex * 3] = water.r + (1 - water.r) * foamAmount;
+      colors[vertexIndex * 3 + 1] = water.g + (1 - water.g) * foamAmount;
+      colors[vertexIndex * 3 + 2] = water.b + (1 - water.b) * foamAmount;
     }
 
     geo.attributes.position.needsUpdate = true;
@@ -215,8 +202,8 @@ export function WaveMesh({ config }: WaveMeshProps) {
           vertexColors={!config.wireframe}
           color={config.wireframe ? config.waveColor : '#ffffff'}
           wireframe={config.wireframe}
-          metalness={config.wireframe ? 0 : 0.1}
-          roughness={config.wireframe ? 1 : 0.3 - config.waterClarity * 0.2}
+          metalness={0}
+          roughness={config.wireframe ? 1 : WATER_ROUGHNESS}
           side={THREE.DoubleSide}
           emissive={config.wireframe ? config.waveColor : '#000000'}
           emissiveIntensity={config.wireframe ? 0.2 : 0}
