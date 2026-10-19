@@ -32,9 +32,15 @@ This is a 3D wave simulator built with React Three Fiber (R3F), simulating the f
 
 - **`src/components/Sky.tsx`** - Procedural sky dome (gradient, sun, drifting clouds, stars), also rendered into the environment map so the water reflects the sky.
 
-- **`src/utils/terrain.ts`** - Procedural Nazaré coastline: `terrainHeight()` (Praia do Norte beach/dunes, Sítio plateau cliffs, fort promontory, canyon head), wave damping over the shallows, and the shore map texture used by the far-ocean shader. World orientation: -Z = Atlantic (west), +Z = land (east), +X = north, -X = south (headland).
+- **`src/utils/terrain.ts`** - Procedural Nazaré coastline: `terrainHeight()` (Praia do Norte beach/dunes, Sítio plateau cliffs, fort promontory, canyon head, Nazaré bay with the town flats, escarpment, Pedra do Guilhim, harbour breakwater, funicular cutting), landmark constants (`LARGO`, `ROAD`, `FUNICULAR`, `BREAKWATER`), wave damping over the shallows, and the shore map texture used by the far-ocean shader. World orientation: -Z = Atlantic (west), +Z = land (east), +X = north, -X = south (headland).
 
-- **`src/components/Coast.tsx`** - Terrain mesh with vertex colors, pine forest, dune scrub, cliff-foot rocks, Sítio village and Santuário (shown when `showCoast` is on).
+- **`src/components/Coast.tsx`** - Terrain mesh with vertex colors, pine forest, dune scrub, cliff-foot rocks, Sítio village with the Largo, Santuário and Ermida da Memória (shown when `showCoast` is on).
+
+- **`src/components/Town.tsx`** - Nazaré town below the Sítio: house grid with a taller seafront row, beach tents, fishing boats, breakwater beacon and night lights.
+
+- **`src/components/Funicular.tsx`** - Ascensor da Nazaré: animated cars on a viaduct from the town up the cliff to the Sítio.
+
+- **`src/utils/instancing.ts`** - Shared helpers for instanced meshes, houses and night light points.
 
 - **`src/components/Lighthouse.tsx`** - Forte de São Miguel Arcanjo with the red lighthouse tower; rotating beam and spotlights at night.
 

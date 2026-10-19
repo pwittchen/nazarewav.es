@@ -11,13 +11,17 @@
  *   - Promontório: lower rock spur jutting into the sea, topped by the
  *     Forte de São Miguel Arcanjo and its red lighthouse
  *   - Nazaré Canyon: deep trench whose head points at the beach (x ≈ 0)
+ *   - Sítio cliff edge (x ≈ -465): the plateau drops south into Nazaré bay, with the
+ *     Largo, Santuário, Ermida da Memória and the Ascensor funicular down to the town
+ *   - Nazaré town: dense grid of houses on the flats between the crescent town beach
+ *     (Praia da Nazaré) and the escarpment behind it, ending at the harbour breakwater
  */
 
 export const TERRAIN_BOUNDS = { minX: -1100, maxX: 1100, minZ: -80, maxZ: 900 };
 
 // Rock spur holding the fort, joined to the plateau by a ridge
 export const SPUR = { x: -208, z: 40, rx: 42, rz: 34 };
-const SPUR_RIDGE_END = { x: -214, z: 100 };
+const SPUR_RIDGE_END = { x: -225, z: 125 };
 export const FORT_POSITION = { x: -205, z: 36 };
 export const FORT_GROUND = 36;
 
@@ -83,9 +87,34 @@ export function createRandom(seed: number) {
   };
 }
 
-/** Z coordinate of the Praia do Norte waterline */
+/** Distance from (x, z) to the segment a-b, plus the 0..1 position along it */
+export function segmentDistance(x: number, z: number, ax: number, az: number, bx: number, bz: number) {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const u = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1);
+  return { dist: Math.hypot(x - (ax + u * dx), z - (az + u * dz)), u };
+}
+
+/**
+ * Z coordinate of the waterline: Praia do Norte in the north, then south of the
+ * headland the coast recedes into the sheltered crescent of Nazaré bay.
+ */
 export function shoreZ(x: number) {
-  return 152 + 5 * Math.sin(x * 0.005) + 4 * fbm(x * 0.01, 3.7, 3);
+  return 152 + 5 * Math.sin(x * 0.005) + 4 * fbm(x * 0.01, 3.7, 3)
+    + 390 * smoothstep(-470, -800, x)
+    // Sand piling up against the harbour breakwater at the south end
+    - 40 * smoothstep(-850, -1100, x);
+}
+
+/** 0 = Praia do Norte / dunes, 1 = Nazaré town and its beach south of the Sítio */
+export function townMask(x: number) {
+  return smoothstep(-470, -540, x);
+}
+
+/** X of the Sítio's south cliff edge, overlooking the town (calmer where the Largo stands) */
+export function southCliffX(z: number) {
+  const calm = 1 - 0.85 * Math.exp(-(((z - 390) / 110) ** 2));
+  return -465 + (15 * fbm(z * 0.01, 4.4, 4) + 5 * fbm(z * 0.05, 7.7, 2)) * calm;
 }
 
 /** Signed distance (positive = inside) to the Sítio plateau outline */
@@ -93,10 +122,11 @@ export function plateauDistance(x: number, z: number) {
   // North cliff line facing Praia do Norte, running diagonally inland
   const northEdge = -182 + 0.2 * Math.max(0, z - 80) + 14 * fbm(z * 0.012, 11.3, 4) + 5 * fbm(z * 0.05, 2.2, 2);
   // West cliff line facing the open ocean, with headlands and coves
-  const westEdge = 72 + 22 * fbm(x * 0.008, 5.1, 4) + 6 * fbm(x * 0.04, 8.8, 2)
-    // South of Sítio the cliffs turn inland towards Nazaré bay and the town beach
-    + 420 * smoothstep(-520, -760, x);
-  return Math.min(northEdge - x, z - westEdge);
+  const westEdge = 72 + 22 * fbm(x * 0.008, 5.1, 4) + 6 * fbm(x * 0.04, 8.8, 2);
+  const sitio = Math.min(northEdge - x, z - westEdge, x - southCliffX(z));
+  // Escarpment behind the town, where the plateau continues south (Pederneira)
+  const escarpment = z - (790 + 25 * fbm(x * 0.008, 6.6, 3));
+  return Math.max(sitio, Math.min(northEdge - x, escarpment));
 }
 
 // Rock strata: flattens heights into ledges of the given step size
@@ -109,6 +139,36 @@ function terrace(h: number, step: number) {
 function plateauTop(x: number, z: number) {
   return 82 + 8 * fbm(x * 0.006, z * 0.006, 3) - 0.02 * Math.max(0, z - 300);
 }
+
+/** Largo de Nossa Senhora da Nazaré: the big paved square of the Sítio */
+export const LARGO = { minX: -448, maxX: -372, minZ: 332, maxZ: 436 };
+
+/** Road from the Largo down the ridge to the fort (Estrada do Farol) */
+export const ROAD: [number, number][] = [
+  [-206, 53], [-216, 90], [-225, 125], [-262, 190], [-330, 262], [-385, 318], [-410, 332],
+];
+
+export function roadDistance(x: number, z: number) {
+  let best = Infinity;
+  for (let i = 1; i < ROAD.length; i++) {
+    const [ax, az] = ROAD[i - 1];
+    const [bx, bz] = ROAD[i];
+    best = Math.min(best, segmentDistance(x, z, ax, az, bx, bz).dist);
+  }
+  return best;
+}
+
+/** Ascensor da Nazaré: funicular from the town up the cliff to the Sítio */
+export const FUNICULAR = {
+  lower: { x: -600, y: 7, z: 425 },
+  upper: { x: -447, y: plateauTop(-447, 418), z: 418 },
+};
+
+/** North breakwater of the Porto de Abrigo, closing the bay in the south */
+export const BREAKWATER = { x: -1062, length: 230 };
+
+/** Pedra do Guilhim: big rock at the foot of the Sítio cliff where the town beach starts */
+export const GUILHIM = { x: -494, z: 150, rx: 16, rz: 11 };
 
 /** Terrain height (meters above sea level, negative = seabed) */
 export function terrainHeight(x: number, z: number) {
@@ -128,6 +188,12 @@ export function terrainHeight(x: number, z: number) {
     const dunes = duneMask * (7 + 5 * fbm(x * 0.025, z * 0.025, 4) + 3 * Math.abs(fbm(x * 0.07, z * 0.05, 2)));
     const inland = smoothstep(90, 600, d) * 22 + duneMask * 6 * fbm(x * 0.006, z * 0.006, 3);
     h = beach + dunes + inland + n;
+    // Town flats: wide beach, the seafront avenue, then streets gently rising inland
+    const town = townMask(x);
+    if (town > 0) {
+      const urban = 3.6 * smoothstep(0, 65, d) + 0.03 * Math.max(0, d - 80) + 0.3 * n;
+      h = lerp(h, urban, town);
+    }
   }
 
   // Sítio plateau: near-vertical sandstone faces with strata ledges and a scree apron
@@ -163,11 +229,42 @@ export function terrainHeight(x: number, z: number) {
   const ridgeDist = Math.hypot(x - (SPUR.x + u * rdx), z - (SPUR.z + u * rdz)) + 5 * fbm(x * 0.06, z * 0.06, 2);
   if (ridgeDist < 30) {
     const t = smoothstep(28, 10, ridgeDist);
-    const ridge = lerp(FORT_GROUND, 72, u) + 3 * fbm(x * 0.08, z * 0.08, 2);
+    const ridge = lerp(FORT_GROUND, plateauTop(x, z), u) + 3 * fbm(x * 0.08, z * 0.08, 2);
     h = Math.max(h, lerp(h, ridge, t) + 4 * t * (1 - t) * fbm(x * 0.13, z * 0.13, 2));
   }
 
+  // Pedra do Guilhim
+  const gx = (x - GUILHIM.x) / GUILHIM.rx;
+  const gz = (z - GUILHIM.z) / GUILHIM.rz;
+  const dg = 1 - Math.sqrt(gx * gx + gz * gz) + 0.25 * fbm(x * 0.08, z * 0.08, 3);
+  if (dg > -0.3) {
+    const rock = 18 * smoothstep(-0.1, 0.6, dg) + 3 * fbm(x * 0.2, z * 0.2, 2) - 2;
+    h = Math.max(h, lerp(h, rock, smoothstep(-0.3, 0.1, dg)));
+  }
+
+  // Breakwater: rock-armoured mole running out into the bay
+  const bwShore = shoreZ(BREAKWATER.x);
+  const bw = segmentDistance(x, z, BREAKWATER.x, bwShore + 20, BREAKWATER.x, bwShore - BREAKWATER.length).dist;
+  if (bw < 14) {
+    h = Math.max(h, 3.2 - (bw / 8) ** 2 * 5 + 0.5 * fbm(x * 0.3, z * 0.3, 2));
+  }
+
+  // Cutting through the cliff top for the funicular track
+  const { lower, upper } = FUNICULAR;
+  const f = segmentDistance(x, z, lower.x, lower.z, upper.x, upper.z);
+  if (f.dist < 7 && f.u > 0.02 && f.u < 0.97) {
+    const trackY = lerp(lower.y, upper.y, f.u) - 0.6;
+    if (h > trackY) h = lerp(h, trackY, smoothstep(7, 4, f.dist));
+  }
+
   return h;
+}
+
+/** 0..1 mask of the breakwater crest (for rock coloring) */
+export function breakwaterMask(x: number, z: number) {
+  const bwShore = shoreZ(BREAKWATER.x);
+  const bw = segmentDistance(x, z, BREAKWATER.x, bwShore + 5, BREAKWATER.x, bwShore - BREAKWATER.length).dist;
+  return smoothstep(12, 9, bw);
 }
 
 /**

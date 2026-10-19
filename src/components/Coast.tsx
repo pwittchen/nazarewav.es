@@ -6,15 +6,26 @@ import {
   FORT_POSITION,
   FORT_GROUND,
   SPUR,
+  LARGO,
+  BREAKWATER,
+  FUNICULAR,
   terrainHeight,
   plateauDistance,
+  southCliffX,
   shoreZ,
+  townMask,
+  roadDistance,
+  breakwaterMask,
+  segmentDistance,
   fbm,
   lerp,
   smoothstep,
   createRandom,
 } from '../utils/terrain';
+import { createInstancedMesh, createHouseMeshes, createLightPoints, disposeObject, type InstanceSpec } from '../utils/instancing';
 import { Lighthouse } from './Lighthouse';
+import { Town } from './Town';
+import { Funicular } from './Funicular';
 
 interface CoastProps {
   config: WaveConfig;
@@ -37,10 +48,14 @@ const palette = {
   rock: new THREE.Color('#7c7366'),
   rockDark: new THREE.Color('#4a443c'),
   paving: new THREE.Color('#b9ad94'),
+  calcada: new THREE.Color('#bdb6a6'), // Portuguese limestone pavement
+  asphalt: new THREE.Color('#55534f'),
+  urban: new THREE.Color('#8f877a'),
 };
 
 const tmpColor = new THREE.Color();
 const tmpColor2 = new THREE.Color();
+const tmpColor3 = new THREE.Color();
 
 function terrainColor(x: number, y: number, z: number, normalY: number, out: THREE.Color) {
   const d = z - shoreZ(x);
@@ -57,11 +72,28 @@ function terrainColor(x: number, y: number, z: number, normalY: number, out: THR
     out.lerp(palette.forestFloor, smoothstep(90, 130, d));
   }
 
+  // Town: beach, calçada promenade, the seafront avenue, then built-up ground
+  const town = townMask(x);
+  if (town > 0 && d > 55) {
+    tmpColor3.copy(palette.calcada)
+      .lerp(palette.asphalt, smoothstep(69, 71, d) * smoothstep(81, 79, d))
+      .lerp(palette.urban, smoothstep(84, 92, d));
+    out.lerp(tmpColor3, town * smoothstep(60, 64, d));
+  }
+
   // Scrubland on top of the Sítio plateau
   if (s > -4) {
     tmpColor.copy(palette.plateau).lerp(palette.scrub, smoothstep(-0.3, 0.3, fbm(x * 0.02, z * 0.02, 3)));
     out.lerp(tmpColor, smoothstep(-4, 10, s) * smoothstep(20, 40, y));
+    // Largo do Sítio and the road down to the fort
+    const largo = Math.max(LARGO.minX - x, x - LARGO.maxX, LARGO.minZ - z, z - LARGO.maxZ);
+    out.lerp(palette.calcada, smoothstep(2, -1, largo));
+    out.lerp(palette.asphalt, smoothstep(4.5, 3, roadDistance(x, z)) * smoothstep(20, 30, y));
   }
+
+  // Rock armour of the harbour breakwater
+  const mole = breakwaterMask(x, z);
+  if (mole > 0) out.lerp(palette.rock, mole);
 
   // Stone courtyard of the fort
   const fortDist = Math.hypot(x - FORT_POSITION.x, z - FORT_POSITION.z);
@@ -111,35 +143,6 @@ function createTerrainGeometry() {
   return geo;
 }
 
-interface InstanceSpec {
-  position: THREE.Vector3;
-  rotationY: number;
-  scale: THREE.Vector3;
-  color: THREE.Color;
-  tilt?: THREE.Euler;
-}
-
-function createInstancedMesh(geometry: THREE.BufferGeometry, material: THREE.Material, specs: InstanceSpec[]) {
-  const mesh = new THREE.InstancedMesh(geometry, material, specs.length);
-  const dummy = new THREE.Object3D();
-  specs.forEach((spec, i) => {
-    dummy.position.copy(spec.position);
-    if (spec.tilt) {
-      dummy.rotation.copy(spec.tilt);
-    } else {
-      dummy.rotation.set(0, spec.rotationY, 0);
-    }
-    dummy.scale.copy(spec.scale);
-    dummy.updateMatrix();
-    mesh.setMatrixAt(i, dummy.matrix);
-    mesh.setColorAt(i, spec.color);
-  });
-  mesh.instanceMatrix.needsUpdate = true;
-  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  mesh.computeBoundingSphere();
-  return mesh;
-}
-
 /** Maritime pine forest (Pinhal) behind Praia do Norte, scrub on the dunes */
 function createVegetation() {
   const rand = createRandom(1987);
@@ -157,11 +160,23 @@ function createVegetation() {
     const z = lerp(150, TERRAIN_BOUNDS.maxZ - 20, rand());
     const d = z - shoreZ(x);
     if (d < 95 + rand() * 35) continue;
-    const s = plateauDistance(x, z);
-    if (s > -12 && !(x < -380 && z > 380 && rand() < 0.35)) continue;
+    if (plateauDistance(x, z) > -12) continue;
     // Natural clearings
     if (fbm(x * 0.01, z * 0.01, 2) < -0.15 && rand() < 0.75) continue;
+    addPine(x, z);
+  }
 
+  // Pine woods on the plateau inland of the Sítio and above the town
+  for (let attempt = 0; attempt < 16000 && canopies.length < 3400; attempt++) {
+    const x = lerp(TERRAIN_BOUNDS.minX + 20, -200, rand());
+    const z = lerp(560, TERRAIN_BOUNDS.maxZ - 10, rand());
+    const s = plateauDistance(x, z);
+    if (s < 40 || (x > -470 && z < 660)) continue;
+    if (fbm(x * 0.01, z * 0.01, 2) < -0.1 && rand() < 0.8) continue;
+    addPine(x, z);
+  }
+
+  function addPine(x: number, z: number) {
     const y = terrainHeight(x, z);
     const height = 8 + rand() * 7;
     const spread = 3.2 + rand() * 2.4;
@@ -215,9 +230,9 @@ function createRocks() {
   const dark = new THREE.Color('#4e4840');
   const light = new THREE.Color('#857b6c');
 
-  for (let attempt = 0; attempt < 20000 && rocks.length < 220; attempt++) {
-    const x = lerp(-290, -150, rand());
-    const z = lerp(-10, 175, rand());
+  for (let attempt = 0; attempt < 50000 && rocks.length < 520; attempt++) {
+    const x = lerp(-540, -150, rand());
+    const z = lerp(-10, 340, rand());
     const y = terrainHeight(x, z);
     if (y < -5 || y > 4) continue;
     // Only where the cliffs meet the sea, not out on the open beach
@@ -232,31 +247,64 @@ function createRocks() {
     });
   }
 
+  // Armour stones along both flanks and around the head of the harbour breakwater
+  const bwShore = shoreZ(BREAKWATER.x);
+  for (let z = bwShore + 10; z > bwShore - BREAKWATER.length - 6; z -= 2.2) {
+    const tip = z < bwShore - BREAKWATER.length + 4;
+    for (const side of tip ? [-1, -0.5, 0, 0.5, 1] : [-1, 1]) {
+      const x = BREAKWATER.x + side * (7 + rand() * 2.5);
+      const zz = tip ? z - (1 - Math.abs(side)) * 7 : z + (rand() - 0.5);
+      const size = 1.6 + rand() * 1.8;
+      rocks.push({
+        position: new THREE.Vector3(x, terrainHeight(x, zz) - size * 0.2, zz),
+        rotationY: 0,
+        tilt: new THREE.Euler(rand() * Math.PI, rand() * Math.PI, rand() * Math.PI),
+        scale: new THREE.Vector3(size, size * 0.8, size),
+        color: dark.clone().lerp(light, 0.4 + rand() * 0.6),
+      });
+    }
+  }
+
   const geo = new THREE.DodecahedronGeometry(1, 0);
   return createInstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true }), rocks);
 }
 
-const SANCTUARY = { x: -300, z: 140 };
-const ERMIDA = { x: -200, z: 100 };
+export const SANCTUARY = { x: -410, z: 457 };
+// Ermida da Memória sits on the cliff edge by the Miradouro do Suberco, above the town
+const ERMIDA = { x: southCliffX(338) + 15, z: 338 };
 
-/** Whitewashed houses with terracotta roofs of the Sítio village on the plateau */
+function isSitioLandmark(x: number, z: number) {
+  return (x > LARGO.minX - 6 && x < LARGO.maxX + 6 && z > LARGO.minZ - 6 && z < LARGO.maxZ + 6)
+    || Math.hypot(x - SANCTUARY.x, z - SANCTUARY.z) < 30
+    || Math.hypot(x - ERMIDA.x, z - ERMIDA.z) < 12
+    || Math.hypot(x - FUNICULAR.upper.x, z - FUNICULAR.upper.z) < 16
+    || roadDistance(x, z) < 8;
+}
+
+/** Whitewashed houses with terracotta roofs of the Sítio and of Pederneira above the town */
 function createVillage() {
   const rand = createRandom(1377);
   const walls: InstanceSpec[] = [];
   const roofs: InstanceSpec[] = [];
+  const lights: THREE.Vector3[] = [];
   const wallColors = ['#f4f1ea', '#efe9dc', '#f6f3ee', '#ece2c8', '#f1e3b5', '#e9eef0'].map((c) => new THREE.Color(c));
   const roofColors = ['#b4552f', '#a34a2a', '#c0683d', '#9b4528'].map((c) => new THREE.Color(c));
   const streetAngle = 0.35;
 
-  for (let attempt = 0; attempt < 12000 && walls.length < 320; attempt++) {
-    const x = lerp(-560, -205, rand());
-    const z = lerp(95, 440, rand());
+  for (let attempt = 0; attempt < 60000 && walls.length < 560; attempt++) {
+    const x = lerp(TERRAIN_BOUNDS.minX + 40, -205, rand());
+    const z = lerp(95, TERRAIN_BOUNDS.maxZ - 10, rand());
     const s = plateauDistance(x, z);
-    if (s < 14) continue;
-    // Denser near the cliff edge, thinning out inland
-    if (rand() > 0.3 + 0.7 * smoothstep(140, 25, s)) continue;
-    if (Math.hypot(x - SANCTUARY.x, z - SANCTUARY.z) < 34) continue;
-    if (Math.hypot(x - ERMIDA.x, z - ERMIDA.z) < 10) continue;
+    if (s < 18) continue;
+    if (x > -470) {
+      // Sítio: denser near the cliff edge, thinning out inland
+      if (z > 640 || rand() > 0.3 + 0.7 * smoothstep(140, 25, s)) continue;
+    } else if (rand() > 0.6 * smoothstep(60, 20, s)) {
+      continue; // Pederneira, along the escarpment above the town
+    }
+    if (isSitioLandmark(x, z)) continue;
+    // Keep the funicular cutting clear
+    if (segmentDistance(x, z, FUNICULAR.lower.x, FUNICULAR.lower.z, FUNICULAR.upper.x, FUNICULAR.upper.z).dist < 10) continue;
 
     const width = 5 + rand() * 5;
     const depth = 5 + rand() * 5;
@@ -276,19 +324,13 @@ function createVillage() {
       scale: new THREE.Vector3(width * 1.08, 1.6 + rand() * 1.2, depth * 1.08),
       color: roofColors[Math.floor(rand() * roofColors.length)],
     });
+    if (rand() < 0.45) {
+      const r = width / 2 + 0.4;
+      lights.push(new THREE.Vector3(x + Math.cos(rotationY) * r, y + 3.5, z - Math.sin(rotationY) * r));
+    }
   }
 
-  const wallGeo = new THREE.BoxGeometry(1, 1, 1);
-  wallGeo.translate(0, 0.5, 0);
-  // Four-sided cone rotated 45° = hipped roof with a 1x1 footprint
-  const roofGeo = new THREE.ConeGeometry(Math.SQRT1_2, 1, 4);
-  roofGeo.rotateY(Math.PI / 4);
-  roofGeo.translate(0, 0.5, 0);
-
-  return [
-    createInstancedMesh(wallGeo, new THREE.MeshStandardMaterial({ roughness: 0.85 }), walls),
-    createInstancedMesh(roofGeo, new THREE.MeshStandardMaterial({ roughness: 0.8, flatShading: true }), roofs),
-  ];
+  return { meshes: createHouseMeshes(walls, roofs), lights };
 }
 
 function gableRoofGeometry(width: number, height: number, length: number) {
@@ -313,7 +355,8 @@ function Sanctuary() {
   const pediment = useMemo(() => gableRoofGeometry(11, 3.5, 0.8), []);
 
   return (
-    <group position={[SANCTUARY.x, y, SANCTUARY.z]} rotation={[0, -Math.PI / 2 + 0.35, 0]}>
+    <group position={[SANCTUARY.x, y, SANCTUARY.z]} rotation={[0, 0.04, 0]}>
+      {/* Facade (local -Z) faces west onto the Largo */}
       {/* Nave */}
       <mesh position={[0, 7, 1]}>
         <boxGeometry args={[12, 14, 26]} />
@@ -384,15 +427,12 @@ export function Coast({ config, night }: CoastProps) {
   const vegetation = useMemo(() => createVegetation(), []);
   const rocks = useMemo(() => createRocks(), []);
   const village = useMemo(() => createVillage(), []);
+  const villageLights = useMemo(() => createLightPoints(village.lights), [village]);
 
   useEffect(() => () => {
     terrainGeometry.dispose();
-    [...vegetation, rocks, ...village].forEach((mesh) => {
-      mesh.geometry.dispose();
-      (mesh.material as THREE.Material).dispose();
-      mesh.dispose();
-    });
-  }, [terrainGeometry, vegetation, rocks, village]);
+    [...vegetation, rocks, ...village.meshes, villageLights].forEach(disposeObject);
+  }, [terrainGeometry, vegetation, rocks, village, villageLights]);
 
   // In wireframe mode the seabed is clipped away so it doesn't clutter the grid
   const clippingPlanes = useMemo(
@@ -407,9 +447,12 @@ export function Coast({ config, night }: CoastProps) {
       </mesh>
       {vegetation.map((mesh) => <primitive key={mesh.uuid} object={mesh} />)}
       <primitive object={rocks} />
-      {village.map((mesh) => <primitive key={mesh.uuid} object={mesh} />)}
+      {village.meshes.map((mesh) => <primitive key={mesh.uuid} object={mesh} />)}
+      {night && <primitive object={villageLights} />}
       <Sanctuary />
       <Ermida />
+      <Town night={night} />
+      <Funicular night={night} />
       <Lighthouse night={night} />
     </group>
   );
