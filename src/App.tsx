@@ -102,6 +102,13 @@ function App() {
         )}
       </main>
 
+      <span className="data-credit">
+        Map data ©{' '}
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>
+        {' '}contributors · Seabed:{' '}
+        <a href="https://emodnet.ec.europa.eu/en/bathymetry" target="_blank" rel="noopener noreferrer">EMODnet</a>
+      </span>
+
       {isEmbedded ? (
         <a
           href={SITE_URL}

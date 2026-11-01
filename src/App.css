@@ -961,3 +961,26 @@ input[type="range"]::-webkit-slider-runnable-track {
     padding: 10px 10px;
   }
 }
+
+/* Required attribution for the geodata */
+.data-credit {
+  position: fixed;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  white-space: nowrap;
+  color: var(--text-secondary, #94a3b8);
+  opacity: 0.7;
+  z-index: 5;
+}
+
+.data-credit a {
+  color: inherit;
+}
+
+@media (max-width: 640px) {
+  .data-credit {
+    display: none;
+  }
+}
