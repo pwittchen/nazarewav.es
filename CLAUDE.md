@@ -14,37 +14,43 @@ bun run lint         # Run ESLint
 
 ## Architecture
 
-This is a 3D wave simulator built with React Three Fiber (R3F), simulating the famous Nazaré waves with underwater canyon amplification effects.
+This is a 3D wave simulator built with React Three Fiber (R3F), simulating the Nazaré waves over the real coast and seabed.
 
 ### Key Files
 
-- **`src/config/waveConfig.ts`** - Central configuration for all wave parameters. Contains `WaveConfig` interface, `defaultWaveConfig`, `wavePresets` (calm/moderate/big/extreme), and `configLimits` for UI sliders. This is the single source of truth for wave behavior. Also holds sky & weather (`timeOfDay`, `cloudCover`, `liveSky`).
+- **`src/config/waveConfig.ts`** - Central configuration: `WaveConfig` interface, `defaultWaveConfig`, `wavePresets` and `configLimits` for UI sliders. Wave heights are offshore significant heights and directions are compass bearings the swell comes from. Also holds sky & weather (`timeOfDay`, `cloudCover`, `liveSky`).
 
-- **`src/components/WaveMesh.tsx`** - The 3D wave mesh using Three.js PlaneGeometry. Animates vertex positions each frame using:
-  - Gerstner-style wave equations for primary and secondary swells
-  - Canyon amplification (waves bigger in center)
-  - Depth factor (waves steepen toward shore)
-  - Wind chop (turbulent small waves)
+- **`src/utils/waveField.ts`** - Swell propagation over the real seabed, pure TS with no Three.js: ray tracing (energy, refraction, focusing, canyon shadow), an eikonal solve (phase, so crests bend) and shoaling, for one direction and period. Also `swellHeight()`/`swellSurface()`, the surface formula. Wavelength and speed follow from the period by the dispersion relation; there is no hand-placed canyon amplification.
 
-- **`src/components/Scene.tsx`** - R3F Canvas setup with camera, sun/moon/sky lighting, OrbitControls, and fog, all driven by `SkyState`.
+- **`src/components/useWaveField.ts`** - Re-solves the field (~200 ms) when direction or period change, debounced.
 
-- **`src/utils/sky.ts`** - Time of day and weather: real sun position over Nazaré, day phase (night/dawn/morning/day/dusk), sky/light/fog colors muted by cloud cover (`computeSky()`), and the realistic water palette (`waterAlbedo()`) shared by WaveMesh and the FarOcean shader. The UI theme is derived from it (dark at night, light otherwise).
+- **`src/components/WaveMesh.tsx`** - 300x300 m CPU-animated mesh at the world origin, on the surf zone. Samples the field per vertex, adds the secondary swell, wind chop and foam.
+
+- **`src/components/FarOcean.tsx`** - GPU ocean out to ±2.4 km. Its vertex shader mirrors `swellSurface()` and WaveMesh, so keep them in sync. The field reaches it as a half-float texture.
+
+- **`src/utils/waterShader.ts`** - Wind chop trains and GLSL noise/ripples shared by both water meshes.
+
+- **`src/utils/geodata.ts`** - Decodes the baked binaries in `src/data/`: 10 m terrain, 30 m regional seabed, OSM land cover and building footprints.
+
+- **`scripts/bake-nazare.mjs`** - Regenerates `src/data/*.bin` from raw downloads. Never edit the binaries by hand; see the README for sources.
+
+- **`src/utils/terrain.ts`** - `terrainHeight()` (baked data plus the fort rock, which the 25 m DEM cannot resolve), surveyed landmark positions (`FORT_POSITION`, `LARGO`, `SANCTUARY`, `ERMIDA`, `FUNICULAR`, `HARBOUR_LIGHTS`) and noise helpers. World frame: metres, 1:1 and true to the compass: origin at 39.6075 N 9.0868 W, +X = north, +Z = east (land), -Z = Atlantic.
+
+- **`src/components/Coast.tsx`** - Terrain and outer hills with vertex colors from land cover, mole armour stones, Santuário and Ermida da Memória (shown when `showCoast` is on).
+
+- **`src/components/Town.tsx`** - One house per OSM footprint (Nazaré, Sítio, Pederneira), taller seafront blocks, beach tents, fishing boats, harbour lights and night lights.
+
+- **`src/components/Funicular.tsx`** - Ascensor da Nazaré: animated cars on a viaduct from the town up to the Sítio.
+
+- **`src/components/Lighthouse.tsx`** - Forte de São Miguel Arcanjo (surveyed outline) with the red Farol tower; rotating beam and spotlights at night.
+
+- **`src/components/Scene.tsx`** - R3F Canvas setup with camera, sun/moon/sky lighting, OrbitControls and fog, all driven by `SkyState`.
+
+- **`src/utils/sky.ts`** - Time of day and weather: real sun position over Nazaré, day phase, sky/light/fog colors muted by cloud cover (`computeSky()`) and the water palette (`waterAlbedo()`). The UI theme is derived from it (dark at night, light otherwise).
 
 - **`src/components/Sky.tsx`** - Procedural sky dome (gradient, sun, drifting clouds, stars), also rendered into the environment map so the water reflects the sky.
 
-- **`src/utils/terrain.ts`** - Procedural Nazaré coastline: `terrainHeight()` (Praia do Norte beach/dunes, Sítio plateau cliffs, fort promontory, canyon head, Nazaré bay with the town flats, escarpment, Pedra do Guilhim, harbour breakwater, funicular cutting), landmark constants (`LARGO`, `ROAD`, `FUNICULAR`, `BREAKWATER`), wave damping over the shallows, and the shore map texture used by the far-ocean shader. World orientation: -Z = Atlantic (west), +Z = land (east), +X = north, -X = south (headland).
-
-- **`src/components/Coast.tsx`** - Terrain mesh with vertex colors, breakwater armour stones, Sítio village with the Largo, Santuário and Ermida da Memória (shown when `showCoast` is on).
-
-- **`src/components/Town.tsx`** - Nazaré town below the Sítio: house grid with a taller seafront row, beach tents, fishing boats, breakwater beacon and night lights.
-
-- **`src/components/Funicular.tsx`** - Ascensor da Nazaré: animated cars on a viaduct from the town up the cliff to the Sítio.
-
 - **`src/utils/instancing.ts`** - Shared helpers for instanced meshes, houses and night light points.
-
-- **`src/components/Lighthouse.tsx`** - Forte de São Miguel Arcanjo with the red lighthouse tower; rotating beam and spotlights at night.
-
-- **`src/components/FarOcean.tsx`** - GPU-animated ocean extending the wave mesh out to the coast. Its vertex shader mirrors the WaveMesh wave equations, so keep both in sync.
 
 - **`src/components/ControlPanel.tsx`** - UI panel with sliders and toggles for real-time parameter adjustment.
 
@@ -61,7 +67,7 @@ This is a 3D wave simulator built with React Three Fiber (R3F), simulating the f
 ```
 App (holds WaveConfig state)
 ├── Scene
-│   └── WaveMesh (reads config, animates geometry)
+│   └── WaveMesh (solves the wave field, animates geometry)
 ├── ForecastPanel (fetches live data, applies to config)
 └── ControlPanel (reads/writes config via onChange)
 ```

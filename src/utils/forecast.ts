@@ -261,10 +261,6 @@ export function applyForecastToConfig(
   config: WaveConfig,
   entry: ForecastEntry
 ): WaveConfig {
-  // Convert meteorological wave direction (where waves come from) to the simulation's
-  // travel direction. The scene uses +X = north and +Z = east (towards the coast),
-  // and waves travel along (sin θ, cos θ), so a westerly swell (270°) maps to θ = 0.
-  const simWaveDirection = (270 - entry.waveDirection + 360) % 360;
   // Convert knots to m/s
   const windSpeedMs = entry.windSpeed * 0.514444;
 
@@ -272,7 +268,7 @@ export function applyForecastToConfig(
     ...config,
     waveHeight: entry.waveHeight,
     wavePeriod: entry.wavePeriod,
-    waveDirection: simWaveDirection,
+    waveDirection: entry.waveDirection,
     windSpeed: windSpeedMs,
     windDirection: entry.windDirection,
     windChopIntensity: Math.min(1, windSpeedMs / 15),

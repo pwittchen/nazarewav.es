@@ -250,18 +250,11 @@ export function ControlPanel({ config, sky, onChange, isOpen: controlledIsOpen, 
                 onChange={(v) => updateConfig('wavePeriod', v)}
               />
               <Slider
-                label="Wave Direction"
+                label="Swell From (compass)"
                 value={config.waveDirection}
                 {...configLimits.waveDirection}
                 unit="°"
                 onChange={(v) => updateConfig('waveDirection', v)}
-              />
-              <Slider
-                label="Wave Length"
-                value={config.waveLength}
-                {...configLimits.waveLength}
-                unit="m"
-                onChange={(v) => updateConfig('waveLength', v)}
               />
               <Slider
                 label="Animation Speed"
@@ -287,7 +280,7 @@ export function ControlPanel({ config, sky, onChange, isOpen: controlledIsOpen, 
                   onChange={(v) => updateConfig('secondaryWavePeriod', v)}
                 />
                 <Slider
-                  label="Direction"
+                  label="From (compass)"
                   value={config.secondaryWaveDirection}
                   {...configLimits.secondaryWaveDirection}
                   unit="°"
@@ -359,23 +352,11 @@ export function ControlPanel({ config, sky, onChange, isOpen: controlledIsOpen, 
           {expandedSections.canyon && (
             <div className="section-content">
               <Slider
-                label="Amplification"
+                label="Refraction Strength"
                 value={config.canyonAmplification}
                 {...configLimits.canyonAmplification}
                 unit="x"
                 onChange={(v) => updateConfig('canyonAmplification', v)}
-              />
-              <Slider
-                label="Focus Width"
-                value={config.canyonFocusWidth}
-                {...configLimits.canyonFocusWidth}
-                onChange={(v) => updateConfig('canyonFocusWidth', v)}
-              />
-              <Slider
-                label="Depth Effect"
-                value={config.canyonDepthEffect}
-                {...configLimits.canyonDepthEffect}
-                onChange={(v) => updateConfig('canyonDepthEffect', v)}
               />
             </div>
           )}
@@ -513,7 +494,7 @@ export function ControlPanel({ config, sky, onChange, isOpen: controlledIsOpen, 
 
       <div className="panel-footer">
         <span className="info-text">
-          Nazaré Canyon amplifies waves up to {config.canyonAmplification.toFixed(1)}x
+          Waves are refracted over the real Nazaré seabed
         </span>
       </div>
     </div>

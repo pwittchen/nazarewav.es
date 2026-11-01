@@ -16,7 +16,7 @@ export function Scene({ config, sky }: SceneProps) {
 
   return (
     <Canvas
-      camera={{ position: [180, 65, 190], fov: 60, near: 0.1, far: 4000 }}
+      camera={{ position: [720, 95, -520], fov: 55, near: 1, far: 30000 }}
       gl={{ antialias: true, alpha: false }}
       onCreated={({ gl }) => { gl.localClippingEnabled = true; }}
     >
@@ -41,13 +41,13 @@ export function Scene({ config, sky }: SceneProps) {
         enableDamping
         dampingFactor={0.05}
         minDistance={30}
-        maxDistance={config.showCoast ? 700 : 250}
+        maxDistance={config.showCoast ? 3500 : 250}
         maxPolarAngle={Math.PI / 2.1}
-        target={[-60, 5, 40]}
+        target={[-200, 20, 180]}
       />
 
       {/* Atmospheric fog */}
-      <fog attach="fog" args={config.showCoast ? [sky.horizonColor, 250, 1400] : [sky.horizonColor, 150, 400]} />
+      <fog attach="fog" args={config.showCoast ? [sky.horizonColor, 1200, 11000] : [sky.horizonColor, 150, 400]} />
     </Canvas>
   );
 }

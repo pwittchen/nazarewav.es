@@ -2,25 +2,46 @@ import { useMemo, useEffect, type MutableRefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WaveConfig } from '../config/waveConfig';
-import { createShoreMapData, SHORE_MAP_BOUNDS, SHORE_MAP_SEABED_RANGE } from '../utils/terrain';
+import { createShoreMapData, OCEAN_BOUNDS, SHORE_MAP_SEABED_RANGE } from '../utils/terrain';
+import { BREAKER_RATIO, GRAVITY, SET_LENGTH, type WaveField } from '../utils/waveField';
+import { chopTrains, NOISE_GLSL, RIPPLE_NORMAL_GLSL } from '../utils/waterShader';
 import { waterAlbedo, waterPalette, WATER_ROUGHNESS } from '../utils/sky';
 
 interface FarOceanProps {
   config: WaveConfig;
   timeRef: MutableRefObject<number>;
+  field: WaveField;
 }
 
-const OCEAN_SIZE = 900;      // Animated area around the main wave mesh
-const OCEAN_SEGMENTS = 300;  // 3m grid, aligned so the ±150 edge of the main mesh falls on vertices
-const HORIZON_SIZE = 8000;   // Flat sea out to the horizon
-const SHORE_MAP_RESOLUTION = 256;
+const OCEAN_SIZE = OCEAN_BOUNDS.size; // Animated area around the main wave mesh
+const OCEAN_SEGMENTS = 480;  // 10m grid, aligned so the ±150 edge of the main mesh falls on vertices
+const HORIZON_SIZE = 40000;  // Flat sea out to the horizon
+const SHORE_MAP_RESOLUTION = 1024;
+
+/** Half-float RGBA texture of the solved field: R = phase, G = gain, B = depth / 100 */
+function createFieldTexture({ grid, phase, gain }: WaveField) {
+  const { nx, nz, heights } = grid;
+  const data = new Uint16Array(nx * nz * 4);
+  const half = THREE.DataUtils.toHalfFloat;
+  for (let n = 0; n < nx * nz; n++) {
+    data[n * 4] = half(phase[n]);
+    data[n * 4 + 1] = half(gain[n]);
+    data[n * 4 + 2] = half(-heights[n] / 100);
+    data[n * 4 + 3] = half(1);
+  }
+  const texture = new THREE.DataTexture(data, nx, nz, THREE.RGBAFormat, THREE.HalfFloatType);
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
 
 /**
  * Extends the ocean beyond the 300x300 simulated wave mesh up to the coast.
  * Uses the same wave equations as WaveMesh, evaluated on the GPU, and skips
  * the area already covered by the main mesh.
  */
-export function FarOcean({ config, timeRef }: FarOceanProps) {
+export function FarOcean({ config, timeRef, field }: FarOceanProps) {
   const geometry = useMemo(() => {
     const geo = new THREE.PlaneGeometry(OCEAN_SIZE, OCEAN_SIZE, OCEAN_SEGMENTS, OCEAN_SEGMENTS);
     geo.rotateX(-Math.PI / 2);
@@ -64,20 +85,31 @@ export function FarOcean({ config, timeRef }: FarOceanProps) {
 
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
-    uPrimary: { value: new THREE.Vector4() },    // dirX, dirZ, k, speed
-    uSecondary: { value: new THREE.Vector4() },  // dirX, dirZ, k, speed
-    uAmplitudes: { value: new THREE.Vector3() }, // primary, secondary, chop
-    uCanyon: { value: new THREE.Vector3() },     // amplification, focus width, depth effect
-    uFoam: { value: new THREE.Vector4() },       // threshold, intensity, wave height, enabled
+    uPrimary: { value: new THREE.Vector4() },    // dirX, dirZ, k0, wrapped omega * t
+    uSecondary: { value: new THREE.Vector4() },  // dirX, dirZ, k, omega * t
+    uAmplitudes: { value: new THREE.Vector4() }, // primary height, secondary height, chop, refraction strength
+    uChopK: { value: [new THREE.Vector4(), new THREE.Vector4()] },     // (kx, kz) of the trains in pairs
+    uChopW: { value: new THREE.Vector4() },      // omega
+    uChopA: { value: new THREE.Vector4() },      // relative amplitude
+    uFoam: { value: new THREE.Vector4() },       // threshold, intensity, whitecaps, enabled
+    uField: { value: null as THREE.DataTexture | null },
+    uFieldBounds: { value: new THREE.Vector4(field.grid.minX, field.grid.minZ, 1 / (field.grid.nx * field.grid.cell), 1 / (field.grid.nz * field.grid.cell)) },
     uShoreMap: { value: shoreMap },
-    uShoreBounds: { value: new THREE.Vector3(SHORE_MAP_BOUNDS.minX, SHORE_MAP_BOUNDS.minZ, SHORE_MAP_BOUNDS.size) },
+    uShoreBounds: { value: new THREE.Vector3(OCEAN_BOUNDS.minX, OCEAN_BOUNDS.minZ, OCEAN_BOUNDS.size) },
     uSeabedRange: { value: new THREE.Vector2(SHORE_MAP_SEABED_RANGE.min, SHORE_MAP_SEABED_RANGE.max) },
     uWaterDeep: { value: waterPalette.deep },
     uWaterShallow: { value: waterPalette.shallow },
     uWaterCrest: { value: waterPalette.crest },
     uWaterMurky: { value: waterPalette.murky },
     uClarity: { value: 1 },
-  }), [shoreMap]);
+  }), [shoreMap, field.grid]);
+
+  // New texture for each solved swell
+  useEffect(() => {
+    const texture = createFieldTexture(field);
+    uniforms.uField.value = texture;
+    return () => texture.dispose();
+  }, [field, uniforms]);
 
   const material = useMemo(() => {
     const mat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
@@ -89,86 +121,72 @@ export function FarOcean({ config, timeRef }: FarOceanProps) {
           uniform float uTime;
           uniform vec4 uPrimary;
           uniform vec4 uSecondary;
-          uniform vec3 uAmplitudes;
-          uniform vec3 uCanyon;
+          uniform vec4 uAmplitudes;
+          uniform vec4 uChopK[2];
+          uniform vec4 uChopW;
+          uniform vec4 uChopA;
           uniform vec4 uFoam;
+          uniform sampler2D uField;
+          uniform vec4 uFieldBounds;
           uniform sampler2D uShoreMap;
           uniform vec3 uShoreBounds;
           uniform vec2 uSeabedRange;
-          varying float vFoam;
+          varying float vBreaking;
+          varying float vCap;
           varying vec2 vXZ;
           varying float vShallow;
           varying float vCrest;
+
+          const float BREAKER_RATIO = ${BREAKER_RATIO.toFixed(3)};
+          const float SET_LENGTH = ${SET_LENGTH.toFixed(1)};
+
+          // Mirrors swellHeight() + swellSurface() of utils/waveField.ts, plus the extras in WaveMesh
+          float oceanHeight(vec2 p, out float breaking, out float crest, out float localDepth) {
+            vec2 fieldUv = (p - uFieldBounds.xy) * uFieldBounds.zw + 0.5 * uFieldBounds.zw * ${field.grid.cell.toFixed(1)};
+            vec4 f = texture(uField, fieldUv);
+            vec4 shore = texture(uShoreMap, (p - uShoreBounds.xy) / uShoreBounds.z);
+            float seabed = mix(uSeabedRange.x, uSeabedRange.y, shore.g);
+            // Values at the bottom of the fine map's range = deep water, use the coarse grid there
+            float depth = shore.g < 0.01 ? max(50.0, f.b * 100.0) : -seabed;
+            localDepth = depth;
+
+            float theta = uPrimary.z * dot(uPrimary.xy, p) + f.r - uPrimary.w;
+            float unlimited = uAmplitudes.x * (1.0 + (f.g - 1.0) * uAmplitudes.w) * (0.82 + 0.43 * sin(theta / SET_LENGTH));
+            float limit = BREAKER_RATIO * max(depth, 0.0);
+            float ratio = limit > 0.0 ? unlimited / limit : 8.0;
+            float height = unlimited / pow(1.0 + ratio * ratio * ratio * ratio, 0.25);
+            float shoal = smoothstep(0.45, 1.0, ratio);
+            crest = pow(0.5 + 0.5 * sin(theta - shoal * cos(theta)), 1.0 + 4.5 * shoal);
+            breaking = clamp((ratio - 0.85) / 0.45, 0.0, 1.0);
+            float swell = height * 0.5 * (2.0 * crest - 1.0 + 0.45 * shoal);
+
+            float shelter = clamp(depth / 10.0, 0.0, 1.0);
+            float secondary = uAmplitudes.y * 0.5 * shelter * sin(dot(uSecondary.xy, p) - uSecondary.w);
+            float chop = (uChopA.x * sin(dot(uChopK[0].xy, p) - uChopW.x * uTime)
+              + uChopA.y * sin(dot(uChopK[0].zw, p) - uChopW.y * uTime)
+              + uChopA.z * sin(dot(uChopK[1].xy, p) - uChopW.z * uTime)
+              + uChopA.w * sin(dot(uChopK[1].zw, p) - uChopW.w * uTime)) * uAmplitudes.z * shelter;
+            float edge = 1.0 - smoothstep(${(OCEAN_SIZE / 2 - 300).toFixed(1)}, ${(OCEAN_SIZE / 2 - 10).toFixed(1)}, max(abs(p.x), abs(p.y)));
+            return depth <= 0.0 ? 0.0 : (swell + secondary + chop) * edge;
+          }
         `)
         .replace('#include <beginnormal_vertex>', `
-          float px = position.x;
-          float pz = position.z;
-          vXZ = vec2(px, pz);
+          vec2 surfacePos = position.xz;
+          vXZ = surfacePos;
 
-          // Same canyon / depth model as WaveMesh
-          float distC = abs(px) / 150.0;
-          float canyonFactor = 1.0 + (uCanyon.x - 1.0) * exp(-distC * distC / (uCanyon.y * uCanyon.y));
-          float depthFactor = 1.0 + uCanyon.z * clamp((pz + 150.0) / 300.0, 0.0, 1.0);
+          float breaking, crest, localDepth, b2, c2, d2;
+          float waveY = oceanHeight(surfacePos, breaking, crest, localDepth);
+          float slopeX = (oceanHeight(surfacePos + vec2(5.0, 0.0), b2, c2, d2) - waveY) / 5.0;
+          float slopeZ = (oceanHeight(surfacePos + vec2(0.0, 5.0), b2, c2, d2) - waveY) / 5.0;
+          vec3 objectNormal = normalize(vec3(-slopeX, 1.0, -slopeZ));
 
-          // Shoaling over the seabed + fade towards the flat horizon ring
-          vec4 shore = texture(uShoreMap, (vec2(px, pz) - uShoreBounds.xy) / uShoreBounds.z);
-          float seabed = mix(uSeabedRange.x, uSeabedRange.y, shore.g);
-          float edge = 1.0 - smoothstep(380.0, 450.0, max(abs(px), abs(pz)));
-
-          float pPhase = uPrimary.z * (uPrimary.x * px + uPrimary.y * pz - uPrimary.w * uTime);
-          float pAmp = uAmplitudes.x * canyonFactor * depthFactor;
-          float pSlope = pAmp * uPrimary.z * cos(pPhase);
-
-          float sPhase = uSecondary.z * (uSecondary.x * px + uSecondary.y * pz - uSecondary.w * uTime);
-          float sAmp = uAmplitudes.y * canyonFactor * 0.7;
-          float sSlope = sAmp * uSecondary.z * cos(sPhase);
-
-          // Breaking limit: wave height stays below ~0.8x the depth (values at the bottom of the range = deep water)
-          float depth = shore.g < 0.01 ? 1000.0 : -seabed;
-          float localAmp = abs(pAmp) + abs(sAmp) + uAmplitudes.z * 3.0;
-          float damp = depth <= 0.0 ? 0.0 : shore.r * min(1.0, depth * 0.8 / max(localAmp, 0.001)) * edge;
-
-          float chop = 0.0;
-          float chopSlope = 0.0;
-          vec2 chopGrad = vec2(0.0);
-          if (uAmplitudes.z > 0.0) {
-            float ct = uTime * 2.0;
-            float a = px * 0.08 + ct * 1.1;
-            float b = pz * 0.06 + ct * 0.9;
-            float c = px * 0.15 - ct * 0.7;
-            float e = pz * 0.12 + ct * 1.3;
-            float f = (px + pz) * 0.1 + ct * 0.8;
-            float m = uAmplitudes.z * 3.0;
-            chop = (sin(a) * cos(b) * 0.5 + sin(c) * cos(e) * 0.3 + sin(f) * 0.2) * m;
-            chopSlope = (cos(a) * 0.08 * cos(b) * 0.5 + cos(c) * 0.15 * cos(e) * 0.3) * m;
-            chopGrad = vec2(
-              0.08 * cos(a) * cos(b) * 0.5 + 0.15 * cos(c) * cos(e) * 0.3 + 0.1 * cos(f) * 0.2,
-              -0.06 * sin(a) * sin(b) * 0.5 - 0.12 * sin(c) * sin(e) * 0.3 + 0.1 * cos(f) * 0.2
-            ) * m;
-          }
-
-          float waveY = (pAmp * sin(pPhase) + sAmp * sin(sPhase) + chop) * damp;
-
-          vec2 grad = (vec2(pSlope) * uPrimary.xy + vec2(sSlope) * uSecondary.xy + chopGrad) * damp;
-          vec3 objectNormal = normalize(vec3(-grad.x, 1.0, -grad.y));
-
-          // Foam: steepness based whitecaps + surf zone whitewater (mirrors WaveMesh)
-          float foam = 0.0;
-          float steepness = abs(pSlope + sSlope + chopSlope) * damp / 1.5;
-          float foamThreshold = uFoam.x * 2.0;
-          if (steepness > foamThreshold) {
-            foam = min(1.0, (steepness - foamThreshold) * 2.0) * uFoam.y;
-            float crestBonus = max(0.0, waveY / (uFoam.z * 2.0));
-            foam = min(1.0, foam + crestBonus * uFoam.y * 0.5);
-          }
-          float surfBand = smoothstep(0.0, 0.12, shore.r) * (1.0 - smoothstep(0.35, 0.9, shore.r));
-          float surfLines = pow(0.5 + 0.5 * sin(pPhase * 2.0), 3.0);
-          foam = max(foam, surfBand * (0.35 + 0.65 * surfLines) * (0.4 + uFoam.y * 0.6));
-          vFoam = foam * uFoam.w;
+          float crestStart = 0.55 + 0.4 * uFoam.x;
+          vBreaking = breaking * (0.25 + 0.75 * crest) * (0.5 + uFoam.y * 0.5) * uFoam.w;
+          vCap = uFoam.z * max(0.0, (crest - crestStart) / (1.0 - crestStart)) * uFoam.w;
 
           // Water body shading inputs (mirrors WaveMesh / waterShallowness)
-          vShallow = shore.g < 0.01 ? 0.0 : 1.0 - smoothstep(2.0, 25.0, depth);
-          vCrest = clamp(waveY / (uFoam.z * 1.5 + 0.5), 0.0, 1.0);
+          vShallow = 1.0 - smoothstep(2.0, 25.0, localDepth);
+          vCrest = crest * crest;
         `)
         .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position.x, waveY, position.z);');
 
@@ -180,14 +198,20 @@ export function FarOcean({ config, timeRef }: FarOceanProps) {
           uniform vec3 uWaterCrest;
           uniform vec3 uWaterMurky;
           uniform float uClarity;
-          varying float vFoam;
+          uniform float uTime;
+          varying float vBreaking;
+          varying float vCap;
           varying vec2 vXZ;
           varying float vShallow;
           varying float vCrest;
+          ${NOISE_GLSL}
+        `)
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+          ${RIPPLE_NORMAL_GLSL}
         `)
         .replace('#include <color_fragment>', `#include <color_fragment>
           // The main wave mesh covers the centre (slight overlap hides the seam)
-          if (abs(vXZ.x) < 148.5 && abs(vXZ.y) < 148.5) discard;
+          if (uFoam.w > 0.5 && abs(vXZ.x) < 148.5 && abs(vXZ.y) < 148.5) discard;
           // Same blend as waterAlbedo() in utils/sky.ts (solid mode only)
           if (uFoam.w > 0.5) {
             vec3 water = mix(uWaterDeep, uWaterShallow, vShallow * 0.85);
@@ -195,12 +219,15 @@ export function FarOcean({ config, timeRef }: FarOceanProps) {
             water = mix(water, uWaterMurky, (1.0 - uClarity) * 0.45);
             diffuseColor.rgb = water;
           }
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), vFoam);
+          // Breaks foam up into streaks and patches, like the pattern in WaveMesh
+          float foamPattern = waterFbm(vXZ * 0.05) * 1.7 - 0.35;
+          float foam = max(vBreaking * (0.55 + 0.45 * foamPattern), vCap * max(0.0, foamPattern * 2.0 - 1.0));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), clamp(foam, 0.0, 1.0));
         `);
     };
     mat.customProgramCacheKey = () => 'nazare-far-ocean';
     return mat;
-  }, [uniforms]);
+  }, [uniforms, field.grid.cell]);
 
   useEffect(() => () => {
     geometry.dispose();
@@ -230,30 +257,33 @@ export function FarOcean({ config, timeRef }: FarOceanProps) {
   }, [material, config.wireframe, config.waveColor, opacity]);
 
   useFrame(() => {
-    const gravity = 9.8;
-    const primaryDir = (config.waveDirection * Math.PI) / 180;
-    const secondaryDir = (config.secondaryWaveDirection * Math.PI) / 180;
+    const time = timeRef.current;
+    const secondaryOmega = (2 * Math.PI) / config.secondaryWavePeriod;
+    const secondaryK = (secondaryOmega * secondaryOmega) / GRAVITY;
+    const secondaryAngle = ((270 - config.secondaryWaveDirection) * Math.PI) / 180;
 
-    uniforms.uTime.value = timeRef.current;
-    uniforms.uPrimary.value.set(
-      Math.sin(primaryDir),
-      Math.cos(primaryDir),
-      (2 * Math.PI) / config.waveLength,
-      (gravity * config.wavePeriod) / (2 * Math.PI) * config.waveSpeed * 0.3
-    );
+    uniforms.uTime.value = time;
+    // Wrapped at a whole set so that sin(theta / SET_LENGTH) stays continuous
+    uniforms.uPrimary.value.set(field.dirX, field.dirZ, field.k0, (field.omega * time) % (2 * Math.PI * SET_LENGTH));
     uniforms.uSecondary.value.set(
-      Math.sin(secondaryDir),
-      Math.cos(secondaryDir),
-      (2 * Math.PI) / (config.waveLength * 0.6),
-      (gravity * config.secondaryWavePeriod) / (2 * Math.PI) * config.waveSpeed * 0.3
+      secondaryK * Math.sin(secondaryAngle),
+      secondaryK * Math.cos(secondaryAngle),
+      0,
+      secondaryOmega * time
     );
     uniforms.uAmplitudes.value.set(
       config.waveHeight,
       config.secondaryWaveHeight,
-      config.windChopIntensity * (1 + config.windSpeed / 20)
+      config.windChopIntensity * (1 + config.windSpeed / 20) * 0.9,
+      config.canyonAmplification
     );
-    uniforms.uCanyon.value.set(config.canyonAmplification, config.canyonFocusWidth, config.canyonDepthEffect);
-    uniforms.uFoam.value.set(config.foamThreshold, config.foamIntensity, config.waveHeight, config.wireframe ? 0 : 1);
+    const trains = chopTrains(config.windDirection);
+    uniforms.uChopK.value[0].set(trains[0].kx, trains[0].kz, trains[1].kx, trains[1].kz);
+    uniforms.uChopK.value[1].set(trains[2].kx, trains[2].kz, trains[3].kx, trains[3].kz);
+    uniforms.uChopW.value.set(trains[0].omega, trains[1].omega, trains[2].omega, trains[3].omega);
+    uniforms.uChopA.value.set(trains[0].amp, trains[1].amp, trains[2].amp, trains[3].amp);
+    const whitecaps = config.foamIntensity * Math.min(1, Math.max(0, (config.windSpeed - 6) / 12));
+    uniforms.uFoam.value.set(config.foamThreshold, config.foamIntensity, whitecaps, config.wireframe ? 0 : 1);
     uniforms.uClarity.value = config.waterClarity;
   });
 

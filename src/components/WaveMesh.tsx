@@ -1,18 +1,25 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WaveConfig } from '../config/waveConfig';
-import { terrainHeight, shoreAttenuation, waveDamping, surfFoam } from '../utils/terrain';
+import { surveyedHeight, clamp, fbm } from '../utils/terrain';
+import { SET_LENGTH, GRAVITY, swellHeight, swellSurface, type SwellShape } from '../utils/waveField';
+import { useWaveField } from './useWaveField';
 import { FarOcean } from './FarOcean';
+import { chopTrains, NOISE_GLSL, RIPPLE_NORMAL_GLSL } from '../utils/waterShader';
 import { waterAlbedo, waterShallowness, WATER_ROUGHNESS } from '../utils/sky';
 
 interface WaveMeshProps {
   config: WaveConfig;
 }
 
+const DEEP = 1000;
+
 export function WaveMesh({ config }: WaveMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
+  const rippleTime = useMemo(() => ({ value: 0 }), []);
+  const field = useWaveField(config.waveDirection, config.wavePeriod);
 
   // Create geometry with proper orientation (XZ plane, Y up)
   const geometry = useMemo(() => {
@@ -31,160 +38,118 @@ export function WaveMesh({ config }: WaveMeshProps) {
     return new Float32Array(geometry.attributes.position.array);
   }, [geometry]);
 
-  // Seabed height, swell attenuation and water shallowness per vertex (waves die out over the shallows)
-  const shoreData = useMemo(() => {
+  // Local depth and water shallowness per vertex
+  const seabed = useMemo(() => {
     const count = originalPositions.length / 3;
-    const seabed = new Float32Array(count);
-    const attenuation = new Float32Array(count);
+    const depth = new Float32Array(count);
     const shallowness = new Float32Array(count);
+    const foamPattern = new Float32Array(count); // Breaks foam up into streaks and patches
     for (let v = 0; v < count; v++) {
-      seabed[v] = terrainHeight(originalPositions[v * 3], originalPositions[v * 3 + 2]);
-      attenuation[v] = shoreAttenuation(seabed[v]);
-      shallowness[v] = waterShallowness(-seabed[v]);
+      const x = originalPositions[v * 3];
+      const z = originalPositions[v * 3 + 2];
+      depth[v] = -surveyedHeight(x, z);
+      shallowness[v] = waterShallowness(depth[v]);
+      foamPattern[v] = 0.5 + 0.8 * fbm(x * 0.05, z * 0.05, 4);
     }
-    return { seabed, attenuation, shallowness };
+    return { depth, shallowness, foamPattern };
   }, [originalPositions]);
 
-  // Scratch color for the per-vertex water albedo
+  // Swell phase and gain per vertex, resampled when a new field is solved
+  const swell = useMemo(() => {
+    const count = originalPositions.length / 3;
+    const phase = new Float32Array(count);
+    const gain = new Float32Array(count);
+    const { grid, k0, dirX, dirZ } = field;
+    for (let v = 0; v < count; v++) {
+      const x = originalPositions[v * 3];
+      const z = originalPositions[v * 3 + 2];
+      const fx = clamp((x - grid.minX) / grid.cell, 0, grid.nx - 1.001);
+      const fz = clamp((z - grid.minZ) / grid.cell, 0, grid.nz - 1.001);
+      const i = Math.floor(fx);
+      const j = Math.floor(fz);
+      const u = fx - i;
+      const w = fz - j;
+      const n = j * grid.nx + i;
+      const lerp2 = (a: Float32Array) =>
+        (a[n] * (1 - u) + a[n + 1] * u) * (1 - w) + (a[n + grid.nx] * (1 - u) + a[n + grid.nx + 1] * u) * w;
+      phase[v] = k0 * (dirX * x + dirZ * z) + lerp2(field.phase);
+      gain[v] = lerp2(field.gain);
+    }
+    return { phase, gain };
+  }, [field, originalPositions]);
+
+  // Scratch objects
   const water = useMemo(() => new THREE.Color(), []);
+  const shape = useMemo<SwellShape>(() => ({ y: 0, breaking: 0, crest: 0 }), []);
 
   useFrame((_, delta) => {
     if (!meshRef.current) return;
 
     // Only advance time if animation is enabled
     if (config.animateWaves) {
-      timeRef.current += delta * config.timeScale;
+      timeRef.current += Math.min(delta, 0.1) * config.timeScale;
     }
     const time = timeRef.current;
+    rippleTime.value = time;
 
     const geo = meshRef.current.geometry as THREE.BufferGeometry;
     const positions = geo.attributes.position.array as Float32Array;
     const colors = geo.attributes.color.array as Float32Array;
 
-    // Calculate wave speed from period (deep water: c = gT/2π)
-    // wavePeriod affects how fast waves travel, waveSpeed is a multiplier
-    const gravity = 9.8;
-    const primaryWaveSpeed = (gravity * config.wavePeriod) / (2 * Math.PI) * config.waveSpeed * 0.3;
-    const secondaryWaveSpeed = (gravity * config.secondaryWavePeriod) / (2 * Math.PI) * config.waveSpeed * 0.3;
+    // Wrapped at a whole set so that sin(theta / SET_LENGTH) stays continuous
+    const wt = (field.omega * time) % (2 * Math.PI * SET_LENGTH);
+
+    // Secondary swell: a plain wave train fading out over the shelf
+    const secondaryOmega = (2 * Math.PI) / config.secondaryWavePeriod;
+    const secondaryK = (secondaryOmega * secondaryOmega) / GRAVITY;
+    const secondaryAngle = ((270 - config.secondaryWaveDirection) * Math.PI) / 180;
+    const secondaryX = secondaryK * Math.sin(secondaryAngle);
+    const secondaryZ = secondaryK * Math.cos(secondaryAngle);
+    const secondaryA = config.secondaryWaveHeight / 2;
 
     // Wind speed affects chop intensity (Beaufort scale approximation)
-    // windSpeed in m/s, higher wind = more chop
-    const windChopMultiplier = config.windChopIntensity * (1 + config.windSpeed / 20);
-
-    // Precompute direction values
-    const primaryDir = (config.waveDirection * Math.PI) / 180;
-    const primaryK = (2 * Math.PI) / config.waveLength;
-    const primarySin = Math.sin(primaryDir);
-    const primaryCos = Math.cos(primaryDir);
-
-    const secondaryDir = (config.secondaryWaveDirection * Math.PI) / 180;
-    const secondaryWaveLength = config.waveLength * 0.6;
-    const secondaryK = (2 * Math.PI) / secondaryWaveLength;
-    const secondarySin = Math.sin(secondaryDir);
-    const secondaryCos = Math.cos(secondaryDir);
-
-    // Grid spacing for slope calculation
-    const gridSpacing = 300 / 200; // 1.5m between vertices
+    const chopAmp = config.windChopIntensity * (1 + config.windSpeed / 20) * 0.9;
+    const trains = chopTrains(config.windDirection);
+    const whitecaps = config.foamIntensity * Math.min(1, Math.max(0, (config.windSpeed - 6) / 12));
+    const crestStart = 0.55 + 0.4 * config.foamThreshold;
 
     for (let i = 0; i < positions.length; i += 3) {
       const x = originalPositions[i];
       const z = originalPositions[i + 2];
-      const vertexIndex = i / 3;
+      const v = i / 3;
 
-      // Canyon amplification - waves get bigger in the center
-      const distFromCenter = Math.abs(x) / 150;
-      const canyonFactor = 1 + (config.canyonAmplification - 1) *
-        Math.exp(-distFromCenter * distFromCenter / (config.canyonFocusWidth * config.canyonFocusWidth));
+      const depth = config.showCoast ? seabed.depth[v] : DEEP;
+      const theta = (config.showCoast ? swell.phase[v] : field.k0 * (field.dirX * x + field.dirZ * z)) - wt;
+      const unlimited = swellHeight(config.waveHeight, config.showCoast ? swell.gain[v] : 1, config.canyonAmplification, theta / SET_LENGTH);
+      swellSurface(theta, unlimited, depth, shape);
 
-      // Depth effect - waves steepen toward shore (positive Z = toward camera)
-      const shoreDistance = (z + 150) / 300; // 0 at back, 1 at front
-      const depthFactor = 1 + config.canyonDepthEffect * shoreDistance;
+      const shelter = Math.min(1, Math.max(0, depth / 10));
+      const secondary = secondaryA * shelter * Math.sin(secondaryX * x + secondaryZ * z - secondaryOmega * time);
 
-      // Primary wave phase
-      const primaryPhase = primaryK * (
-        primarySin * x +
-        primaryCos * z -
-        primaryWaveSpeed * time
-      );
-      const primaryAmplitude = config.waveHeight * canyonFactor * depthFactor;
-      const primaryWave = primaryAmplitude * Math.sin(primaryPhase);
-
-      // Calculate primary wave slope (derivative)
-      const primarySlope = primaryAmplitude * primaryK * Math.cos(primaryPhase);
-
-      // Secondary wave (cross swell)
-      const secondaryPhase = secondaryK * (
-        secondarySin * x +
-        secondaryCos * z -
-        secondaryWaveSpeed * time
-      );
-      const secondaryAmplitude = config.secondaryWaveHeight * canyonFactor * 0.7;
-      const secondaryWave = secondaryAmplitude * Math.sin(secondaryPhase);
-
-      // Calculate secondary wave slope
-      const secondarySlope = secondaryAmplitude * secondaryK * Math.cos(secondaryPhase);
-
-      // Wind chop (small turbulent waves)
-      let windChop = 0;
-      let chopSlope = 0;
-      if (windChopMultiplier > 0) {
-        const chopTime = time * 2;
-        const chop1 = Math.sin(x * 0.08 + chopTime * 1.1) * Math.cos(z * 0.06 + chopTime * 0.9);
-        const chop2 = Math.sin(x * 0.15 - chopTime * 0.7) * Math.cos(z * 0.12 + chopTime * 1.3);
-        const chop3 = Math.sin((x + z) * 0.1 + chopTime * 0.8);
-        windChop = (chop1 * 0.5 + chop2 * 0.3 + chop3 * 0.2) * windChopMultiplier * 3;
-
-        // Approximate chop slope
-        const chopDeriv1 = Math.cos(x * 0.08 + chopTime * 1.1) * 0.08 * Math.cos(z * 0.06 + chopTime * 0.9);
-        const chopDeriv2 = Math.cos(x * 0.15 - chopTime * 0.7) * 0.15 * Math.cos(z * 0.12 + chopTime * 1.3);
-        chopSlope = (chopDeriv1 * 0.5 + chopDeriv2 * 0.3) * windChopMultiplier * 3;
+      let chop = 0;
+      for (const train of trains) {
+        chop += train.amp * Math.sin(train.kx * x + train.kz * z - train.omega * time);
       }
+      chop *= chopAmp * shelter;
 
-      // Near the coast the swell shoals and breaks, so it fades out over the shallows
-      const shoreDamping = config.showCoast
-        ? waveDamping(shoreData.seabed[vertexIndex], primaryAmplitude + secondaryAmplitude + windChopMultiplier * 3)
-        : 1;
-
-      // Set Y position (height)
-      const totalHeight = (primaryWave + secondaryWave + windChop) * shoreDamping;
+      const dry = depth <= 0 ? 0 : 1;
+      const totalHeight = (shape.y + secondary + chop) * dry;
       positions[i + 1] = totalHeight;
 
-      // Calculate total slope magnitude for foam
-      const totalSlope = Math.abs(primarySlope + secondarySlope + chopSlope) * shoreDamping;
-
-      // Wave steepness (slope relative to wavelength) - higher = more likely to break
-      const steepness = totalSlope / gridSpacing;
-
-      // Foam calculation based on steepness and threshold
-      // foamThreshold: steepness at which foam starts appearing (0-1 maps to 0-2 slope)
-      // foamIntensity: how much foam is visible (0-1)
-      const foamThreshold = config.foamThreshold * 2;
-      let foamAmount = 0;
-
-      if (steepness > foamThreshold) {
-        // Foam increases with steepness above threshold
-        foamAmount = Math.min(1, (steepness - foamThreshold) * 2) * config.foamIntensity;
-
-        // More foam on wave crests (where height is positive and high)
-        const crestBonus = Math.max(0, totalHeight / (config.waveHeight * 2));
-        foamAmount = Math.min(1, foamAmount + crestBonus * config.foamIntensity * 0.5);
-      }
-
-      // Whitewater in the surf zone
-      if (config.showCoast) {
-        const surf = surfFoam(shoreData.attenuation[vertexIndex], primaryPhase) * (0.4 + config.foamIntensity * 0.6);
-        foamAmount = Math.max(foamAmount, surf);
-      }
+      // Whitewater on and behind breaking crests, whitecaps from the wind offshore
+      const noise = seabed.foamPattern[v];
+      const surf = shape.breaking * (0.25 + 0.75 * shape.crest) * (0.55 + 0.45 * noise) * (0.5 + config.foamIntensity * 0.5);
+      const cap = whitecaps * Math.max(0, (shape.crest - crestStart) / (1 - crestStart)) * Math.max(0, noise * 2 - 1);
+      const foamAmount = Math.min(1, Math.max(surf, cap) * dry);
 
       // Water body: deep blue-green, teal over the shallows, lighter through crests, murkier when turbid
-      const shallow = config.showCoast ? shoreData.shallowness[vertexIndex] : 0;
-      const crest = Math.min(1, Math.max(0, totalHeight / (config.waveHeight * 1.5 + 0.5)));
-      waterAlbedo(water, shallow, crest, config.waterClarity);
+      const shallow = config.showCoast ? seabed.shallowness[v] : 0;
+      waterAlbedo(water, shallow, shape.crest * shape.crest, config.waterClarity);
 
       // Blend between water color and white foam
-      colors[vertexIndex * 3] = water.r + (1 - water.r) * foamAmount;
-      colors[vertexIndex * 3 + 1] = water.g + (1 - water.g) * foamAmount;
-      colors[vertexIndex * 3 + 2] = water.b + (1 - water.b) * foamAmount;
+      colors[v * 3] = water.r + (1 - water.r) * foamAmount;
+      colors[v * 3 + 1] = water.g + (1 - water.g) * foamAmount;
+      colors[v * 3 + 2] = water.b + (1 - water.b) * foamAmount;
     }
 
     geo.attributes.position.needsUpdate = true;
@@ -192,13 +157,30 @@ export function WaveMesh({ config }: WaveMeshProps) {
     geo.computeVertexNormals();
   });
 
+  // Per-pixel ripples, sharing the clock of the wave animation
+  const addRipples = useCallback((shader: { uniforms: Record<string, THREE.IUniform>; vertexShader: string; fragmentShader: string }) => {
+    shader.uniforms.uTime = rippleTime;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vXZ;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvXZ = position.xz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec2 vXZ;
+        uniform float uTime;
+        ${NOISE_GLSL}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        ${RIPPLE_NORMAL_GLSL}`);
+  }, [rippleTime]);
+
   // Material opacity based on water clarity (clearer = slightly more transparent)
   const opacity = config.wireframe ? 1 : 0.85 + config.waterClarity * 0.15;
 
   return (
     <>
-      <mesh ref={meshRef} geometry={geometry} position={[0, 0, 0]}>
+      {/* At kilometre range the dense wireframe merges into a solid block: FarOcean's grid takes over */}
+      <mesh ref={meshRef} geometry={geometry} position={[0, 0, 0]} visible={!(config.wireframe && config.showCoast)}>
         <meshStandardMaterial
+          onBeforeCompile={addRipples}
           vertexColors={!config.wireframe}
           color={config.wireframe ? config.waveColor : '#ffffff'}
           wireframe={config.wireframe}
@@ -211,7 +193,7 @@ export function WaveMesh({ config }: WaveMeshProps) {
           opacity={opacity}
         />
       </mesh>
-      {config.showCoast && <FarOcean config={config} timeRef={timeRef} />}
+      {config.showCoast && <FarOcean config={config} timeRef={timeRef} field={field} />}
     </>
   );
 }

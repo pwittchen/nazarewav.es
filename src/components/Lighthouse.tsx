@@ -7,13 +7,13 @@ interface LighthouseProps {
   night: boolean; // Beam and lantern on
 }
 
-// Fort outline in local coordinates (x = north, z = east / inland)
+// Surveyed fort outline (OSM) in local coordinates (x = north, z = east / inland)
 const FORT_OUTLINE: [number, number][] = [
-  [-15, -8], [-8, -16], [4, -17], [14, -10], [17, 2], [10, 12], [-4, 14], [-14, 6],
+  [18, 10], [5, -9], [5, -17], [0, -27], [-8, -22], [-17, -20], [-15, -3], [-10, 6], [-7, 23], [0, 11],
 ];
 const WALL_BASE = FORT_GROUND - 8;   // Walls rise from the rock below the courtyard
 const WALL_TOP = FORT_GROUND + 5;
-const TOWER_POSITION: [number, number] = [12.2, -9.2]; // On the seaward north-west bastion
+const TOWER_POSITION: [number, number] = [-7, -21]; // On the seaward bastion, where the Farol stands
 // Farol da Nazaré: an ~8 m round cast-iron tower painted red, standing on the fort wall
 const PLINTH_HEIGHT = 0.6;
 const TOWER_HEIGHT = 4.2;  // Iron shaft up to the gallery
@@ -24,7 +24,7 @@ const GLAZING_Y = GALLERY_Y + 0.2 + PARAPET_HEIGHT; // Bottom of the glazed lant
 const ROOF_Y = GLAZING_Y + GLAZING_HEIGHT;
 const LANTERN_Y = WALL_TOP + GLAZING_Y + GLAZING_HEIGHT / 2;
 const IRON_RED = '#c4211a';
-const BEAM_LENGTH = 420;
+const BEAM_LENGTH = 1400;
 const ROTATION_PERIOD = 10; // seconds per full turn of the optic
 
 function outlineShape(scale: number) {
@@ -77,7 +77,7 @@ export function Lighthouse({ night: isNight }: LighthouseProps) {
   const coping = useMemo(() => createWallGeometry(0.8, 0.5), []);
 
   const beamGeometry = useMemo(() => {
-    const geo = new THREE.CylinderGeometry(0.5, 30, BEAM_LENGTH, 24, 1, true);
+    const geo = new THREE.CylinderGeometry(0.5, 90, BEAM_LENGTH, 24, 1, true);
     geo.translate(0, -BEAM_LENGTH / 2, 0); // narrow end at the lantern
     geo.rotateZ(Math.PI / 2);              // point along +X
     return geo;
@@ -131,7 +131,7 @@ export function Lighthouse({ night: isNight }: LighthouseProps) {
       ))}
 
       {/* Barracks inside the courtyard */}
-      <group position={[-3, FORT_GROUND, 6]} rotation={[0, 0.2, 0]}>
+      <group position={[-3, FORT_GROUND, -9]} rotation={[0, 1.3, 0]}>
         <mesh position={[0, 2.5, 0]}>
           <boxGeometry args={[14, 5, 5.5]} />
           <meshStandardMaterial color="#efe8d8" roughness={0.85} />
@@ -253,7 +253,7 @@ export function Lighthouse({ night: isNight }: LighthouseProps) {
                   target={spotTargets[i]}
                   color="#fff1cc"
                   intensity={6}
-                  distance={600}
+                  distance={1800}
                   decay={0}
                   angle={0.1}
                   penumbra={0.6}

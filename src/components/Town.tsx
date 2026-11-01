@@ -3,27 +3,26 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
-  BREAKWATER,
+  ERMIDA,
+  FORT_POSITION,
   FUNICULAR,
+  HARBOUR_LIGHTS,
+  LARGO,
+  SANCTUARY,
+  SURFACE,
   terrainHeight,
-  plateauDistance,
-  shoreZ,
+  surfaceAt,
+  townShoreZ,
   segmentDistance,
   clamp,
   createRandom,
 } from '../utils/terrain';
+import { buildings, type Building } from '../utils/geodata';
 import { createInstancedMesh, createHouseMeshes, createLightPoints, disposeObject, type InstanceSpec } from '../utils/instancing';
 
 interface TownProps {
   night: boolean;
 }
-
-// Town grid between the Sítio cliff and the harbour (streets run inland, perpendicular to the beach)
-const TOWN_MIN_X = -1045;
-const TOWN_MAX_X = -478;
-const LANE_SPACING = 15;   // Narrow lanes between house columns
-const LOT_DEPTH = 10.5;
-const SEAFRONT = 86;       // Distance of the first row of houses from the waterline
 
 const wallColors = ['#f6f3ee', '#f4f1ea', '#efe9dc', '#f2efe8', '#ece2c8', '#f1e3b5', '#dfe8ec', '#f3e1d3']
   .map((c) => new THREE.Color(c));
@@ -31,87 +30,69 @@ const wallColors = ['#f6f3ee', '#f4f1ea', '#efe9dc', '#f2efe8', '#ece2c8', '#f1e
 const tileColors = ['#5f86b3', '#6f9a86', '#c9a24a'].map((c) => new THREE.Color(c));
 const roofColors = ['#b4552f', '#a34a2a', '#c0683d', '#9b4528'].map((c) => new THREE.Color(c));
 
+// North of here the coast is Praia do Norte, with only kiosks and car parks on the sand
+const TOWN_NORTH = -560;
+
+/** Modelled separately, so their OSM footprints are skipped */
+function hasOwnModel({ x, z }: Building) {
+  const { lower, upper } = FUNICULAR;
+  return Math.hypot(x - SANCTUARY.x, z - SANCTUARY.z) < 32
+    || Math.hypot(x - FORT_POSITION.x, z - FORT_POSITION.z) < 45
+    || Math.hypot(x - ERMIDA.x, z - ERMIDA.z) < 8
+    || Math.hypot(x - lower.x, z - lower.z) < 10
+    || Math.hypot(x - upper.x, z - upper.z) < 10
+    || (x > LARGO.minX && x < LARGO.maxX && z > LARGO.minZ && z < LARGO.maxZ)
+    || segmentDistance(x, z, lower.x, lower.z, upper.x, upper.z).dist < 6;
+}
+
+/** Sand close by on the seaward side: the blocks of the seafront Avenida da República */
+function onSeafront({ x, z, width, depth }: Building) {
+  if (x > TOWN_NORTH || width * depth < 90) return false;
+  return [40, 70, 100].some((d) => (surfaceAt(x, z - d) & SURFACE.classMask) === SURFACE.beach);
+}
+
 /**
- * Nazaré town: whitewashed 2-3 storey houses along narrow lanes, taller hotels and
- * apartment blocks on the seafront Avenida da República.
+ * Nazaré, the Sítio and Pederneira: one house per OSM footprint, at its real position
+ * and street alignment, with mapped floors or a typical 2-3 storeys and taller seafront blocks.
  */
 function createTownHouses() {
   const rand = createRandom(1912);
   const walls: InstanceSpec[] = [];
   const roofs: InstanceSpec[] = [];
   const lights: THREE.Vector3[] = [];
-  const { lower, upper } = FUNICULAR;
 
-  const addHouse = (x: number, z: number, width: number, depth: number, storeys: number) => {
+  for (const building of buildings) {
+    if (hasOwnModel(building)) continue;
+    const { x, z, width, depth, angle, levels } = building;
+    const cos = Math.cos(angle) / 2;
+    const sin = Math.sin(angle) / 2;
     // Sit on the lowest corner so houses on the slope never float
     const y = Math.min(
-      terrainHeight(x - width / 2, z - depth / 2),
-      terrainHeight(x + width / 2, z - depth / 2),
-      terrainHeight(x - width / 2, z + depth / 2),
-      terrainHeight(x + width / 2, z + depth / 2),
+      terrainHeight(x + width * cos - depth * sin, z + width * sin + depth * cos),
+      terrainHeight(x + width * cos + depth * sin, z + width * sin - depth * cos),
+      terrainHeight(x - width * cos - depth * sin, z - width * sin + depth * cos),
+      terrainHeight(x - width * cos + depth * sin, z - width * sin - depth * cos),
     ) - 0.8;
+    const big = width * depth > 400;
+    const storeys = levels || (onSeafront(building) ? 4 + Math.floor(rand() * 4) : big ? 2 : 2 + Math.floor(rand() * 2.3));
     const height = storeys * 3 + 0.8;
-    const tiled = rand() < 0.08;
     walls.push({
       position: new THREE.Vector3(x, y, z),
-      rotationY: 0,
+      rotationY: -angle,
       scale: new THREE.Vector3(width, height, depth),
-      color: tiled ? tileColors[Math.floor(rand() * tileColors.length)] : wallColors[Math.floor(rand() * wallColors.length)],
+      color: !big && rand() < 0.08 ? tileColors[Math.floor(rand() * tileColors.length)] : wallColors[Math.floor(rand() * wallColors.length)],
     });
     // Most houses have hipped tile roofs, the taller blocks flat roof terraces
     if (storeys <= 3 ? rand() < 0.85 : rand() < 0.25) {
       roofs.push({
         position: new THREE.Vector3(x, y + height, z),
-        rotationY: 0,
-        scale: new THREE.Vector3(width * 1.06, 1.4 + rand() * 1.2, depth * 1.06),
+        rotationY: -angle,
+        scale: new THREE.Vector3(width * 1.06, Math.min(1.4 + rand() * 1.2, 0.3 * Math.min(width, depth) + 0.6), depth * 1.06),
         color: roofColors[Math.floor(rand() * roofColors.length)],
       });
     }
-    // Lit windows on the seaward facade
-    for (let s = 0; s < storeys; s++) {
-      if (rand() < 0.35) {
-        lights.push(new THREE.Vector3(x + (rand() - 0.5) * width * 0.7, y + 2.5 + s * 3, z - depth / 2 - 0.3));
-      }
-    }
-  };
-
-  for (let gx = TOWN_MIN_X; gx < TOWN_MAX_X; gx += LANE_SPACING) {
-    const front = shoreZ(gx + LANE_SPACING / 2) + SEAFRONT;
-    let row = 0;
-    for (let gz = front; gz < 800; gz += LOT_DEPTH, row++) {
-      // Every few lots a cross street
-      if (row % 5 === 4) continue;
-      const x = gx + (LANE_SPACING - 4) / 2 + (rand() - 0.5);
-      const z = gz + LOT_DEPTH / 2;
-      // Stay off the cliffs and the funicular
-      if (plateauDistance(x, z) > -10) continue;
-      if (segmentDistance(x, z, lower.x, lower.z, upper.x, upper.z).dist < 9) continue;
-      if (Math.hypot(x - lower.x, z - lower.z) < 16) continue;
-      // Small squares and yards
-      if (rand() < 0.05) continue;
-
-      const width = LANE_SPACING - 4 - rand() * 1.2;
-      const depth = LOT_DEPTH - 0.8 - rand() * 1.2;
-      const storeys = row === 0 ? 4 + Math.floor(rand() * 4) : 2 + Math.floor(rand() * 2.3);
-      if (row > 0 && rand() < 0.5) {
-        // Two narrow houses side by side
-        addHouse(x - width / 4, z, width / 2 - 0.15, depth, Math.max(1, storeys + Math.floor(rand() * 3) - 1));
-        addHouse(x + width / 4, z, width / 2 - 0.15, depth, Math.max(1, storeys + Math.floor(rand() * 3) - 1));
-      } else {
-        addHouse(x, z, width, depth, storeys);
-      }
-    }
-  }
-
-  // Street lamps along the seafront promenade and up the lanes
-  for (let x = TOWN_MIN_X; x < TOWN_MAX_X; x += 14) {
-    const z = shoreZ(x) + 67;
-    lights.push(new THREE.Vector3(x, terrainHeight(x, z) + 5, z));
-  }
-  for (let gx = TOWN_MIN_X - 2; gx < TOWN_MAX_X; gx += LANE_SPACING) {
-    for (let z = shoreZ(gx) + SEAFRONT + 20; z < 790; z += 24) {
-      if (plateauDistance(gx, z) > -10) continue;
-      lights.push(new THREE.Vector3(gx, terrainHeight(gx, z) + 5, z));
+    if (rand() < 0.5) {
+      lights.push(new THREE.Vector3(x, y + 2.5 + Math.floor(rand() * storeys) * 3, z - depth / 2 - 0.3));
     }
   }
 
@@ -165,8 +146,8 @@ function createBeach() {
   const canvasColors = ['#2c64b5', '#d23b3b', '#f0f0ea', '#e9a52a', '#2f8a5b'].map((c) => new THREE.Color(c));
 
   // Fishing boats hauled up on the south end of the beach, bows to the sea
-  for (let x = -1030; x < -860; x += 6 + rand() * 6) {
-    const z = shoreZ(x) + 34 + rand() * 24;
+  for (let x = -1760; x < -1540; x += 6 + rand() * 6) {
+    const z = townShoreZ(x) + 40 + rand() * 30;
     const size = 0.85 + rand() * 0.3;
     boats.push({
       position: new THREE.Vector3(x, terrainHeight(x, z) - 0.15, z),
@@ -177,10 +158,10 @@ function createBeach() {
   }
 
   // Two rows of tents in front of the town centre
-  for (const row of [24, 28]) {
-    for (let x = -860; x < -600; x += 3) {
+  for (const row of [40, 44]) {
+    for (let x = -1400; x < -900; x += 3) {
       if (rand() < 0.12) continue;
-      const z = shoreZ(x) + row;
+      const z = townShoreZ(x) + row;
       tents.push({
         position: new THREE.Vector3(x, terrainHeight(x, z) - 0.1, z),
         rotationY: 0,
@@ -196,37 +177,25 @@ function createBeach() {
   ];
 }
 
-/** Concrete crest of the breakwater with a red-and-white beacon at its head */
-function Breakwater({ night }: TownProps) {
+/** Red or green striped beacon on a mole head, flashing every 4 seconds at night */
+function HarbourLight({ x, z, color, night }: TownProps & (typeof HARBOUR_LIGHTS)[number]) {
   const lampRef = useRef<THREE.MeshStandardMaterial>(null);
-  const shore = shoreZ(BREAKWATER.x);
-  const headZ = shore - BREAKWATER.length + 6;
-  const headY = terrainHeight(BREAKWATER.x, headZ);
-  const length = BREAKWATER.length + 10;
-
-  // Port-side light: red, flashing every 4 seconds
   useFrame(({ clock }) => {
     if (lampRef.current) lampRef.current.emissiveIntensity = night && clock.elapsedTime % 4 < 1 ? 4 : 0;
   });
 
   return (
-    <group>
-      <mesh position={[BREAKWATER.x, 3.4, shore + 15 - length / 2]}>
-        <boxGeometry args={[6, 1.2, length]} />
-        <meshStandardMaterial color="#a7a397" roughness={0.95} />
-      </mesh>
-      <group position={[BREAKWATER.x, Math.max(headY, 3.4), headZ]}>
-        {[0, 1, 2, 3].map((i) => (
-          <mesh key={i} position={[0, 1 + i * 2, 0]}>
-            <cylinderGeometry args={[0.8 - i * 0.06, 0.85 - i * 0.06, 2, 16]} />
-            <meshStandardMaterial color={i % 2 ? '#f2f0ea' : '#c22a20'} roughness={0.6} />
-          </mesh>
-        ))}
-        <mesh position={[0, 8.6, 0]}>
-          <cylinderGeometry args={[0.45, 0.45, 1.2, 12]} />
-          <meshStandardMaterial ref={lampRef} color="#ff4a3a" emissive="#ff2a1a" emissiveIntensity={0} />
+    <group position={[x, Math.max(terrainHeight(x, z), 3.4), z]}>
+      {[0, 1, 2, 3].map((i) => (
+        <mesh key={i} position={[0, 1 + i * 2, 0]}>
+          <cylinderGeometry args={[0.8 - i * 0.06, 0.85 - i * 0.06, 2, 16]} />
+          <meshStandardMaterial color={i % 2 ? '#f2f0ea' : color} roughness={0.6} />
         </mesh>
-      </group>
+      ))}
+      <mesh position={[0, 8.6, 0]}>
+        <cylinderGeometry args={[0.45, 0.45, 1.2, 12]} />
+        <meshStandardMaterial ref={lampRef} color={color} emissive={color} emissiveIntensity={0} />
+      </mesh>
     </group>
   );
 }
@@ -245,7 +214,7 @@ export function Town({ night }: TownProps) {
       {houses.meshes.map((mesh) => <primitive key={mesh.uuid} object={mesh} />)}
       {beach.map((mesh) => <primitive key={mesh.uuid} object={mesh} />)}
       {night && <primitive object={lights} />}
-      <Breakwater night={night} />
+      {HARBOUR_LIGHTS.map((light) => <HarbourLight key={light.x} {...light} night={night} />)}
     </group>
   );
 }

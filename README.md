@@ -105,7 +105,17 @@ All wave parameters can be configured in one place: `src/config/waveConfig.ts`
 
 ## About Nazaré
 
-Nazaré is a fishing village in Portugal famous for having some of the largest waves in the world. The Nazaré Canyon, an underwater canyon that extends for about 230 km, focuses and amplifies Atlantic swells, creating waves that can exceed 30 meters in height. This simulator attempts to recreate this phenomenon by applying canyon amplification effects to the wave simulation.
+Nazaré is a fishing village in Portugal famous for having some of the largest waves in the world. The Nazaré Canyon, an underwater canyon that extends for about 230 km, refracts and reflects long-period Atlantic swell along its northern rim and focuses it on Praia do Norte. This simulator recreates that from real data: the coast, town and seabed are surveyed and to scale, and rays traced over the bathymetry decide where the energy lands, including the shadow over the canyon. Nothing about the amplification is hand-placed.
+
+## Geodata
+
+The binaries in `src/data` are baked by `node scripts/bake-nazare.mjs <rawDataDir>` from:
+
+- Bathymetry: [EMODnet Bathymetry](https://emodnet.ec.europa.eu/en/bathymetry) DTM (WCS, ~115 m)
+- Land elevation: [Mapzen/AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/), Terrarium format, zoom 14 (EU-DEM over Europe, © European Union, Copernicus)
+- Coastline, buildings, roads, land cover: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, ODbL
+
+The propagation model follows Hope et al., [Focusing of Swell at the Nazaré Submarine Canyon](https://egusphere.copernicus.org/preprints/2026/egusphere-2026-2778/) (EGUsphere preprint, 2026).
 
 ## Deployment
 

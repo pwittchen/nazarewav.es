@@ -10,7 +10,7 @@ interface SkyProps {
   windSpeed: number;
 }
 
-const DOME_RADIUS = 3500;
+const DOME_RADIUS = 12000;
 
 const skyVertexShader = /* glsl */ `
   varying vec3 vDir;
