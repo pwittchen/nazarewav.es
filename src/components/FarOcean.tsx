@@ -3,13 +3,14 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WaveConfig } from '../config/waveConfig';
 import { createShoreMapData, OCEAN_BOUNDS, SHORE_MAP_SEABED_RANGE } from '../utils/terrain';
-import { BREAKER_RATIO, GRAVITY, SET_LENGTH, type WaveField } from '../utils/waveField';
+import { BREAKER_RATIO, GRAVITY, SET_LENGTH, SET_CYCLE, SET_PEAKS, SET_LULL, type WaveField } from '../utils/waveField';
 import { chopTrains, NOISE_GLSL, RIPPLE_NORMAL_GLSL } from '../utils/waterShader';
 import { waterAlbedo, waterPalette, WATER_ROUGHNESS } from '../utils/sky';
 
 interface FarOceanProps {
   config: WaveConfig;
   timeRef: MutableRefObject<number>;
+  swellClock: MutableRefObject<number>; // omega * t of the primary swell, kept by WaveMesh
   field: WaveField;
 }
 
@@ -41,7 +42,7 @@ function createFieldTexture({ grid, phase, gain }: WaveField) {
  * Uses the same wave equations as WaveMesh, evaluated on the GPU, and skips
  * the area already covered by the main mesh.
  */
-export function FarOcean({ config, timeRef, field }: FarOceanProps) {
+export function FarOcean({ config, timeRef, swellClock, field }: FarOceanProps) {
   const geometry = useMemo(() => {
     const geo = new THREE.PlaneGeometry(OCEAN_SIZE, OCEAN_SIZE, OCEAN_SEGMENTS, OCEAN_SEGMENTS);
     geo.rotateX(-Math.PI / 2);
@@ -139,6 +140,17 @@ export function FarOcean({ config, timeRef, field }: FarOceanProps) {
 
           const float BREAKER_RATIO = ${BREAKER_RATIO.toFixed(3)};
           const float SET_LENGTH = ${SET_LENGTH.toFixed(1)};
+          const float SET_CYCLE = ${SET_CYCLE.toFixed(1)};
+          const float SET_LULL = ${SET_LULL.toFixed(4)};
+          const float SET_PEAKS[${SET_CYCLE}] = float[${SET_CYCLE}](${SET_PEAKS.map((p) => p.toFixed(4)).join(', ')});
+
+          // Mirrors setEnvelope() of utils/waveField.ts
+          float setEnvelope(float theta) {
+            float u = theta / (6.28318531 * SET_LENGTH) + 0.5;
+            float n = floor(u);
+            float b = sin(3.14159265 * (u - n));
+            return SET_LULL + (SET_PEAKS[int(mod(n, SET_CYCLE))] - SET_LULL) * b * b;
+          }
 
           // Mirrors swellHeight() + swellSurface() of utils/waveField.ts, plus the extras in WaveMesh
           float oceanHeight(vec2 p, out float breaking, out float crest, out float localDepth) {
@@ -151,7 +163,7 @@ export function FarOcean({ config, timeRef, field }: FarOceanProps) {
             localDepth = depth;
 
             float theta = uPrimary.z * dot(uPrimary.xy, p) + f.r - uPrimary.w;
-            float unlimited = uAmplitudes.x * (1.0 + (f.g - 1.0) * uAmplitudes.w) * (0.82 + 0.43 * sin(theta / SET_LENGTH));
+            float unlimited = uAmplitudes.x * (1.0 + (f.g - 1.0) * uAmplitudes.w) * setEnvelope(theta);
             float limit = BREAKER_RATIO * max(depth, 0.0);
             float ratio = limit > 0.0 ? unlimited / limit : 8.0;
             float height = unlimited / pow(1.0 + ratio * ratio * ratio * ratio, 0.25);
@@ -263,8 +275,7 @@ export function FarOcean({ config, timeRef, field }: FarOceanProps) {
     const secondaryAngle = ((270 - config.secondaryWaveDirection) * Math.PI) / 180;
 
     uniforms.uTime.value = time;
-    // Wrapped at a whole set so that sin(theta / SET_LENGTH) stays continuous
-    uniforms.uPrimary.value.set(field.dirX, field.dirZ, field.k0, (field.omega * time) % (2 * Math.PI * SET_LENGTH));
+    uniforms.uPrimary.value.set(field.dirX, field.dirZ, field.k0, swellClock.current);
     uniforms.uSecondary.value.set(
       secondaryK * Math.sin(secondaryAngle),
       secondaryK * Math.cos(secondaryAngle),

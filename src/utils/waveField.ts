@@ -272,10 +272,64 @@ export function computeWaveField(grid: SeabedGrid, fromDeg: number, period: numb
 export const BREAKER_RATIO = 1.05;
 /** Waves per set: sets of bigger waves roll through every SET_LENGTH periods */
 export const SET_LENGTH = 12;
+/** Distinct sets before the sequence repeats (~30 min at 18 s) */
+export const SET_CYCLE = 8;
+/** omega * t is wrapped at this, a whole cycle of sets, so that the envelope stays continuous */
+export const SET_WRAP = 2 * Math.PI * SET_LENGTH * SET_CYCLE;
+
+/**
+ * Set heights relative to the significant height Hs, as a real sea state has them.
+ * Individual waves follow the Rayleigh distribution, P(H > h) = exp(-2 (h / Hs)²): each
+ * set peaks at a quantile of the biggest of its SET_LENGTH waves, the waves in between
+ * swell up to it from the lull, and the whole cycle is scaled so that the mean of its
+ * highest third is exactly Hs. That leaves the mean wave at 0.62 Hs and the biggest at
+ * 1.52 Hs, the Rayleigh values (0.625, and sqrt(ln 96 / 2) = 1.51 for 96 waves).
+ */
+const SET_SPREAD = 2;
+const SET_ORDER = [5, 3, 1, 6, 0, 4, 2, 7]; // Rank of each set in the cycle: big and small ones mixed
+export const { SET_PEAKS, SET_LULL } = (() => {
+  const quantile = (p: number) => Math.sqrt(-Math.log(1 - Math.pow(p, 1 / SET_LENGTH)) / 2);
+  const ranked = SET_ORDER.map((r) => 1 + (quantile((r + 0.5) / SET_CYCLE) - 1) * SET_SPREAD);
+  const lull = 0.35;
+  const heights: number[] = [];
+  for (const peak of ranked) {
+    for (let m = 0; m < SET_LENGTH; m++) heights.push(lull + (peak - lull) * Math.sin((Math.PI * (m + 0.5)) / SET_LENGTH) ** 2);
+  }
+  heights.sort((a, b) => b - a);
+  const third = heights.slice(0, Math.round(heights.length / 3));
+  const hs = third.reduce((a, b) => a + b) / third.length;
+  return { SET_PEAKS: ranked.map((p) => p / hs), SET_LULL: lull / hs };
+})();
+
+/** Height of the waves at this phase relative to Hs: the set they belong to and where in it */
+export function setEnvelope(theta: number) {
+  // Half a set in: see swellClockStart()
+  const u = theta / (2 * Math.PI * SET_LENGTH) + 0.5;
+  const n = Math.floor(u);
+  const peak = SET_PEAKS[((n % SET_CYCLE) + SET_CYCLE) % SET_CYCLE];
+  const b = Math.sin(Math.PI * (u - n));
+  return SET_LULL + (peak - SET_LULL) * b * b;
+}
+
+/** Where the outer peak breaks on big days, on the northern rim of the canyon */
+export const PEAK = { x: -150, z: -450 };
+
+/**
+ * omega * t to start a newly solved field at: the set clock is anchored so that the peak
+ * is in the middle of a set (the first of the cycle) with the biggest set of the cycle
+ * next. Sets then follow the statistics above; only the moment we start watching is chosen.
+ */
+export function swellClockStart(field: WaveField) {
+  const { grid } = field;
+  const i = Math.round((PEAK.x - grid.minX) / grid.cell);
+  const j = Math.round((PEAK.z - grid.minZ) / grid.cell);
+  const phase = field.k0 * (field.dirX * PEAK.x + field.dirZ * PEAK.z) + field.phase[j * grid.nx + i];
+  return ((phase % SET_WRAP) + SET_WRAP) % SET_WRAP;
+}
 
 /** Offshore-to-local swell, written once here and mirrored in the FarOcean shader */
-export function swellHeight(height: number, gain: number, focus: number, setPhase: number) {
-  return height * (1 + (gain - 1) * focus) * (0.82 + 0.43 * Math.sin(setPhase));
+export function swellHeight(height: number, gain: number, focus: number, theta: number) {
+  return height * (1 + (gain - 1) * focus) * setEnvelope(theta);
 }
 
 export interface SwellShape {

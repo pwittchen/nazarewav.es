@@ -1,9 +1,9 @@
-import { useRef, useMemo, useCallback } from 'react';
+import { useRef, useMemo, useCallback, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WaveConfig } from '../config/waveConfig';
 import { surveyedHeight, clamp, fbm } from '../utils/terrain';
-import { SET_LENGTH, GRAVITY, swellHeight, swellSurface, type SwellShape } from '../utils/waveField';
+import { SET_WRAP, GRAVITY, swellClockStart, swellHeight, swellSurface, type SwellShape } from '../utils/waveField';
 import { useWaveField } from './useWaveField';
 import { FarOcean } from './FarOcean';
 import { chopTrains, NOISE_GLSL, RIPPLE_NORMAL_GLSL } from '../utils/waterShader';
@@ -20,6 +20,9 @@ export function WaveMesh({ config }: WaveMeshProps) {
   const timeRef = useRef(0);
   const rippleTime = useMemo(() => ({ value: 0 }), []);
   const field = useWaveField(config.waveDirection, config.wavePeriod);
+  // Phase of the swell, omega * t, accumulated so that it stays smooth when the period changes
+  const swellClock = useRef(swellClockStart(field));
+  useEffect(() => { swellClock.current = swellClockStart(field); }, [field]);
 
   // Create geometry with proper orientation (XZ plane, Y up)
   const geometry = useMemo(() => {
@@ -87,7 +90,10 @@ export function WaveMesh({ config }: WaveMeshProps) {
 
     // Only advance time if animation is enabled
     if (config.animateWaves) {
-      timeRef.current += Math.min(delta, 0.1) * config.timeScale;
+      const dt = Math.min(delta, 0.1) * config.timeScale;
+      timeRef.current += dt;
+      // Wrapped at a whole cycle of sets so that the set envelope stays continuous
+      swellClock.current = (swellClock.current + field.omega * dt) % SET_WRAP;
     }
     const time = timeRef.current;
     rippleTime.value = time;
@@ -96,8 +102,7 @@ export function WaveMesh({ config }: WaveMeshProps) {
     const positions = geo.attributes.position.array as Float32Array;
     const colors = geo.attributes.color.array as Float32Array;
 
-    // Wrapped at a whole set so that sin(theta / SET_LENGTH) stays continuous
-    const wt = (field.omega * time) % (2 * Math.PI * SET_LENGTH);
+    const wt = swellClock.current;
 
     // Secondary swell: a plain wave train fading out over the shelf
     const secondaryOmega = (2 * Math.PI) / config.secondaryWavePeriod;
@@ -120,7 +125,7 @@ export function WaveMesh({ config }: WaveMeshProps) {
 
       const depth = config.showCoast ? seabed.depth[v] : DEEP;
       const theta = (config.showCoast ? swell.phase[v] : field.k0 * (field.dirX * x + field.dirZ * z)) - wt;
-      const unlimited = swellHeight(config.waveHeight, config.showCoast ? swell.gain[v] : 1, config.canyonAmplification, theta / SET_LENGTH);
+      const unlimited = swellHeight(config.waveHeight, config.showCoast ? swell.gain[v] : 1, config.canyonAmplification, theta);
       swellSurface(theta, unlimited, depth, shape);
 
       const shelter = Math.min(1, Math.max(0, depth / 10));
@@ -193,7 +198,7 @@ export function WaveMesh({ config }: WaveMeshProps) {
           opacity={opacity}
         />
       </mesh>
-      {config.showCoast && <FarOcean config={config} timeRef={timeRef} field={field} />}
+      {config.showCoast && <FarOcean config={config} timeRef={timeRef} swellClock={swellClock} field={field} />}
     </>
   );
 }

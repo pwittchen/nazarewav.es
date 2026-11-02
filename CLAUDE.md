@@ -20,7 +20,7 @@ This is a 3D wave simulator built with React Three Fiber (R3F), simulating the N
 
 - **`src/config/waveConfig.ts`** - Central configuration: `WaveConfig` interface, `defaultWaveConfig`, `wavePresets` and `configLimits` for UI sliders. Wave heights are offshore significant heights and directions are compass bearings the swell comes from. Also holds sky & weather (`timeOfDay`, `cloudCover`, `liveSky`).
 
-- **`src/utils/waveField.ts`** - Swell propagation over the real seabed, pure TS with no Three.js: ray tracing (energy, refraction, focusing, canyon shadow), an eikonal solve (phase, so crests bend) and shoaling, for one direction and period. Also `swellHeight()`/`swellSurface()`, the surface formula. Wavelength and speed follow from the period by the dispersion relation; there is no hand-placed canyon amplification.
+- **`src/utils/waveField.ts`** - Swell propagation over the real seabed, pure TS with no Three.js: ray tracing (energy, refraction, focusing, canyon shadow), an eikonal solve (phase, so crests bend) and shoaling, for one direction and period. Also `swellHeight()`/`swellSurface()`, the surface formula, and the set envelope (`setEnvelope()`, Rayleigh-distributed set peaks scaled so the sea state has exactly the configured Hs; `swellClockStart()` anchors the clock mid-set at `PEAK` when a field is solved). Wavelength and speed follow from the period by the dispersion relation; there is no hand-placed canyon amplification.
 
 - **`src/components/useWaveField.ts`** - Re-solves the field (~200 ms) when direction or period change, debounced.
 
