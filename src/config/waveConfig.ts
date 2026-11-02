@@ -46,6 +46,7 @@ export interface WaveConfig {
   animateWaves: boolean;     // Enable natural wave movement (default: true)
   waveColor: string;         // Color of the wireframe grid (hex string); solid water uses a realistic palette
   showCoast: boolean;        // Show the Nazaré coast: Praia do Norte, cliffs, fort & lighthouse (default: true)
+  droneFlight: boolean;      // Cinematic drone flight orbiting the bay instead of manual orbit controls (default: false)
 
   // Animation
   timeScale: number;         // Overall animation speed multiplier
@@ -85,6 +86,7 @@ export const defaultWaveConfig: WaveConfig = {
   animateWaves: true,        // Natural wave movement by default
   waveColor: '#3be1f7',      // Cyan color by default
   showCoast: true,           // Coastline visible by default
+  droneFlight: false,        // Manual camera by default
 
   // Animation
   timeScale: 1.0,

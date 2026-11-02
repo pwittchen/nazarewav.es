@@ -46,6 +46,8 @@ This is a 3D wave simulator built with React Three Fiber (R3F), simulating the N
 
 - **`src/components/CameraRig.tsx`** - Flies the camera to a viewpoint from `cameraViews` (`shore`, `peak`) when a preset asks for it (`presetViews` in waveConfig).
 
+- **`src/components/DroneCamera.tsx`** - Cinematic drone flight (`droneFlight` toggle in Display): a slow orbit over the bay between the canyon peak and the fort, with drifting radius and altitude, terrain clearance over the cliffs and a gimbal panning between peak, fort and beach. Disables the orbit controls while flying and hands the camera back without a jump.
+
 - **`src/components/Scene.tsx`** - R3F Canvas setup with camera, sun/moon/sky lighting, OrbitControls and fog, all driven by `SkyState`.
 
 - **`src/utils/sky.ts`** - Time of day and weather: real sun position over Nazaré, day phase, sky/light/fog colors muted by cloud cover (`computeSky()`) and the water palette (`waterAlbedo()`). The UI theme is derived from it (dark at night, light otherwise).

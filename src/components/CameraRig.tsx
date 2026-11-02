@@ -15,7 +15,7 @@ interface Flight {
 }
 
 /** Flies the camera and the orbit target to a viewpoint whenever a new view is requested */
-export function CameraRig({ view }: { view: { name: CameraView } }) {
+export function CameraRig({ view, paused }: { view: { name: CameraView }; paused: boolean }) {
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null;
   const flight = useRef<Flight | null>(null);
@@ -24,7 +24,7 @@ export function CameraRig({ view }: { view: { name: CameraView } }) {
   useEffect(() => {
     // The first view is where the Canvas camera already starts
     if (first.current) { first.current = false; return; }
-    if (!controls) return;
+    if (!controls || paused) return;
     const { position, target } = cameraViews[view.name];
     flight.current = {
       fromPosition: camera.position.clone(),
@@ -46,6 +46,8 @@ export function CameraRig({ view }: { view: { name: CameraView } }) {
   useFrame((_, delta) => {
     const f = flight.current;
     if (!f || !controls) return;
+    // The drone flight owns the camera
+    if (paused) { flight.current = null; return; }
     f.t = Math.min(1, f.t + delta / FLIGHT_SECONDS);
     const e = f.t * f.t * (3 - 2 * f.t);
     camera.position.lerpVectors(f.fromPosition, f.toPosition, e);

@@ -4,6 +4,7 @@ import { WaveMesh } from './WaveMesh';
 import { Coast } from './Coast';
 import { Sky } from './Sky';
 import { CameraRig } from './CameraRig';
+import { DroneCamera } from './DroneCamera';
 import { cameraViews, type WaveConfig, type CameraView } from '../config/waveConfig';
 import type { SkyState } from '../utils/sky';
 
@@ -49,7 +50,8 @@ export function Scene({ config, sky, view }: SceneProps) {
         target={[...cameraViews.shore.target]}
       />
 
-      <CameraRig view={view} />
+      <CameraRig view={view} paused={config.droneFlight} />
+      <DroneCamera active={config.droneFlight} showCoast={config.showCoast} />
 
       {/* Atmospheric fog */}
       <fog attach="fog" args={config.showCoast ? [sky.horizonColor, 1200, 11000] : [sky.horizonColor, 150, 400]} />

@@ -172,6 +172,7 @@ export function ControlPanel({ config, sky, onChange, onViewChange, isOpen: cont
       animateWaves: config.animateWaves,
       waveColor: config.waveColor,
       showCoast: config.showCoast,
+      droneFlight: config.droneFlight,
       timeOfDay: config.timeOfDay,
       cloudCover: config.cloudCover,
       liveSky: config.liveSky,
@@ -436,6 +437,11 @@ export function ControlPanel({ config, sky, onChange, onViewChange, isOpen: cont
                 label="Nazaré Coast"
                 checked={config.showCoast}
                 onChange={(v) => updateConfig('showCoast', v)}
+              />
+              <Toggle
+                label="Drone Flight"
+                checked={config.droneFlight}
+                onChange={(v) => updateConfig('droneFlight', v)}
               />
               <Toggle
                 label="Wireframe Grid"
