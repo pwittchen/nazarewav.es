@@ -7,15 +7,16 @@ import { SET_WRAP, GRAVITY, crossedSwell, swellClockStart, swellHeight, swellSur
 import { useWaveField } from './useWaveField';
 import { FarOcean } from './FarOcean';
 import { chopTrains, NOISE_GLSL, RIPPLE_NORMAL_GLSL } from '../utils/waterShader';
-import { waterAlbedo, waterShallowness, WATER_ROUGHNESS } from '../utils/sky';
+import { waterAlbedo, waterShallowness, wireframeColor, WATER_ROUGHNESS } from '../utils/sky';
 
 interface WaveMeshProps {
   config: WaveConfig;
+  daylight: number; // 0-1, darkens the wireframe grid by day
 }
 
 const DEEP = 1000;
 
-export function WaveMesh({ config }: WaveMeshProps) {
+export function WaveMesh({ config, daylight }: WaveMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
   const rippleTime = useMemo(() => ({ value: 0 }), []);
@@ -184,6 +185,7 @@ export function WaveMesh({ config }: WaveMeshProps) {
 
   // Material opacity based on water clarity (clearer = slightly more transparent)
   const opacity = config.wireframe ? 1 : 0.85 + config.waterClarity * 0.15;
+  const gridColor = useMemo(() => wireframeColor(config.waveColor, daylight), [config.waveColor, daylight]);
 
   return (
     <>
@@ -192,18 +194,18 @@ export function WaveMesh({ config }: WaveMeshProps) {
         <meshStandardMaterial
           onBeforeCompile={addRipples}
           vertexColors={!config.wireframe}
-          color={config.wireframe ? config.waveColor : '#ffffff'}
+          color={config.wireframe ? gridColor : '#ffffff'}
           wireframe={config.wireframe}
           metalness={0}
           roughness={config.wireframe ? 1 : WATER_ROUGHNESS}
           side={THREE.DoubleSide}
-          emissive={config.wireframe ? config.waveColor : '#000000'}
+          emissive={config.wireframe ? gridColor : '#000000'}
           emissiveIntensity={config.wireframe ? 0.2 : 0}
           transparent={!config.wireframe}
           opacity={opacity}
         />
       </mesh>
-      {config.showCoast && <FarOcean config={config} timeRef={timeRef} swellClock={swellClock} field={field} />}
+      {config.showCoast && <FarOcean config={config} gridColor={gridColor} timeRef={timeRef} swellClock={swellClock} field={field} />}
     </>
   );
 }

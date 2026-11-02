@@ -33,7 +33,7 @@ export function Scene({ config, sky, view }: SceneProps) {
       <directionalLight position={[-150, 300, 120]} intensity={sky.moonIntensity} color="#9db0d8" />
 
       {/* Wave mesh */}
-      <WaveMesh config={config} />
+      <WaveMesh config={config} daylight={sky.daylight} />
 
       {/* Praia do Norte, Sítio cliffs, fort and lighthouse */}
       {config.showCoast && <Coast config={config} night={sky.isNight} />}

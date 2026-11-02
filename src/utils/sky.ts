@@ -18,6 +18,7 @@ export type DayPhase = 'night' | 'dawn' | 'morning' | 'day' | 'dusk';
 export interface SkyState {
   phase: DayPhase;
   isNight: boolean;                // Dark UI theme + lighthouse beam
+  daylight: number;                // 0 at night, 1 in full daylight
   sunElevation: number;            // Degrees above the horizon
   sunDirection: THREE.Vector3;     // Unit vector towards the sun in scene space
   zenithColor: THREE.Color;
@@ -187,6 +188,7 @@ export function computeSky(localHour: number, cloudCover: number, date: Date = n
   return {
     phase: dayPhase(elevation, rising),
     isNight: elevation < -4,
+    daylight,
     sunElevation: elevation,
     sunDirection,
     zenithColor,
@@ -217,6 +219,14 @@ export const waterPalette = {
   crest: new THREE.Color('#2d8a7e'),
   murky: new THREE.Color('#40574a'),
 };
+
+/**
+ * Wireframe grid color for the time of day: the picked color as is at night, where it glows
+ * against the dark, darkened in daylight so the grid stays readable against the bright sky.
+ */
+export function wireframeColor(color: string, daylight: number): string {
+  return '#' + new THREE.Color(color).multiplyScalar(1 - 0.85 * daylight).getHexString();
+}
 
 // Low roughness so the sky and sun glint off the surface (Fresnel does the rest)
 export const WATER_ROUGHNESS = 0.12;

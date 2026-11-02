@@ -9,6 +9,7 @@ import { waterAlbedo, waterPalette, WATER_ROUGHNESS } from '../utils/sky';
 
 interface FarOceanProps {
   config: WaveConfig;
+  gridColor: string; // Wireframe color, already adjusted for the time of day
   timeRef: MutableRefObject<number>;
   swellClock: MutableRefObject<number>; // omega * t of the primary swell, kept by WaveMesh
   field: WaveField;
@@ -53,7 +54,7 @@ function createDepthTexture({ nx, nz, heights }: SeabedGrid) {
  * Uses the same wave equations as WaveMesh, evaluated on the GPU, and skips
  * the area already covered by the main mesh.
  */
-export function FarOcean({ config, timeRef, swellClock, field }: FarOceanProps) {
+export function FarOcean({ config, gridColor, timeRef, swellClock, field }: FarOceanProps) {
   const geometry = useMemo(() => {
     const geo = new THREE.PlaneGeometry(OCEAN_SIZE, OCEAN_SIZE, OCEAN_SEGMENTS, OCEAN_SEGMENTS);
     geo.rotateX(-Math.PI / 2);
@@ -281,15 +282,15 @@ export function FarOcean({ config, timeRef, swellClock, field }: FarOceanProps) 
 
   useEffect(() => {
     material.wireframe = config.wireframe;
-    material.color.set(config.wireframe ? config.waveColor : '#ffffff');
-    material.emissive.set(config.wireframe ? config.waveColor : '#000000');
+    material.color.set(config.wireframe ? gridColor : '#ffffff');
+    material.emissive.set(config.wireframe ? gridColor : '#000000');
     material.emissiveIntensity = config.wireframe ? 0.2 : 0;
     material.metalness = 0;
     material.roughness = config.wireframe ? 1 : WATER_ROUGHNESS;
     material.transparent = !config.wireframe;
     material.opacity = opacity;
     material.needsUpdate = true;
-  }, [material, config.wireframe, config.waveColor, opacity]);
+  }, [material, config.wireframe, gridColor, opacity]);
 
   useFrame(() => {
     const time = timeRef.current;
