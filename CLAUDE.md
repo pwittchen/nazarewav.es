@@ -40,7 +40,9 @@ This is a 3D wave simulator built with React Three Fiber (R3F), simulating the N
 
 - **`src/utils/terrain.ts`** - `terrainHeight()` (baked data plus the fort rock, which the 25 m DEM cannot resolve), surveyed landmark positions (`FORT_POSITION`, `LARGO`, `SANCTUARY`, `ERMIDA`, `FUNICULAR`, `HARBOUR_LIGHTS`) and noise helpers. World frame: metres, 1:1 and true to the compass: origin at 39.6075 N 9.0868 W, +X = north, +Z = east (land), -Z = Atlantic.
 
-- **`src/components/Coast.tsx`** - Terrain and outer hills with vertex colors from land cover, mole armour stones, Santuário and Ermida da Memória (shown when `showCoast` is on).
+- **`src/components/Coast.tsx`** - Terrain (5 m mesh, bicubic heights) and outer hills (30 m), mole armour stones, Santuário and Ermida da Memória (shown when `showCoast` is on).
+
+- **`src/utils/terrainMaterial.ts`** - Per-pixel terrain shading (MeshStandardMaterial patched in `onBeforeCompile`), shared by the terrain and outer hills: OSM land cover as blurred mask textures with noise-warped edges, cliff strata and gullies, pine canopy, fields, sand ripples and wet sand, roads, calçada, plus a bump that perturbs the normal. Fine detail fades with camera distance.
 
 - **`src/components/Town.tsx`** - One house per OSM footprint (Nazaré, Sítio, Pederneira), taller seafront blocks, beach tents, fishing boats, harbour lights and night lights.
 

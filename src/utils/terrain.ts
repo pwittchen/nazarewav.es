@@ -122,6 +122,37 @@ export function surveyedHeight(x: number, z: number) {
   return sampleGrid(inside ? detailGrid : regionGrid, x, z);
 }
 
+// Catmull-Rom weights for the four samples around t in [0, 1)
+function cubicWeights(t: number, w: Float64Array) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  w[0] = 0.5 * (-t3 + 2 * t2 - t);
+  w[1] = 0.5 * (3 * t3 - 5 * t2 + 2);
+  w[2] = 0.5 * (-3 * t3 + 4 * t2 + t);
+  w[3] = 0.5 * (t3 - t2);
+}
+const wx = new Float64Array(4);
+const wz = new Float64Array(4);
+
+/** Bicubic sample of a grid: smooth slopes where bilinear sampling leaves creases at every cell */
+function sampleGridCubic(g: SeabedGrid, x: number, z: number) {
+  const fx = clamp((x - g.minX) / g.cell, 0, g.nx - 1.001);
+  const fz = clamp((z - g.minZ) / g.cell, 0, g.nz - 1.001);
+  const i = Math.floor(fx);
+  const j = Math.floor(fz);
+  cubicWeights(fx - i, wx);
+  cubicWeights(fz - j, wz);
+  const h = g.heights;
+  let sum = 0;
+  for (let b = 0; b < 4; b++) {
+    const row = clamp(j + b - 1, 0, g.nz - 1) * g.nx;
+    let line = 0;
+    for (let a = 0; a < 4; a++) line += wx[a] * h[row + clamp(i + a - 1, 0, g.nx - 1)];
+    sum += wz[b] * line;
+  }
+  return sum;
+}
+
 /** Raw land-cover byte at a point (see SURFACE) */
 export function surfaceAt(x: number, z: number) {
   const i = Math.round((x - detailGrid.minX) / detailGrid.cell);
@@ -159,7 +190,9 @@ export function townShoreZ(x: number) {
 
 /** Terrain height (meters above sea level, negative = seabed) */
 export function terrainHeight(x: number, z: number) {
-  let h = surveyedHeight(x, z);
+  const b = TERRAIN_BOUNDS;
+  const inside = x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ;
+  let h = inside ? sampleGridCubic(detailGrid, x, z) : sampleGrid(regionGrid, x, z);
 
   // Weathered ground below the DEM's resolution; beaches and the sea stay smooth
   const land = smoothstep(2, 14, h);
