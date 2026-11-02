@@ -90,6 +90,26 @@ export const defaultWaveConfig: WaveConfig = {
   timeScale: 1.0,
 };
 
+/**
+ * Camera viewpoints, in world metres. The shore view watches the beach break; big swells
+ * break 400-1000 m out on the northern rim of the canyon (17-21 m deep for the biggest
+ * sets), so the peak view looks north from over the canyon past the fort, the angle the
+ * crowds on the headland see.
+ */
+export const cameraViews = {
+  shore: { position: [720, 95, -520], target: [-200, 20, 180] },
+  peak: { position: [-860, 110, 230], target: [-60, 0, -360] },
+} as const satisfies Record<string, { position: readonly number[]; target: readonly number[] }>;
+export type CameraView = keyof typeof cameraViews;
+
+/** The viewpoint each preset switches to */
+export const presetViews: Record<keyof typeof wavePresets, CameraView> = {
+  calm: 'shore',
+  moderate: 'shore',
+  big: 'peak',
+  extreme: 'peak',
+};
+
 // Preset configurations for different conditions
 export const wavePresets = {
   calm: {

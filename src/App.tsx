@@ -3,7 +3,7 @@ import { Scene } from './components/Scene';
 import { ControlPanel } from './components/ControlPanel';
 import { ForecastPanel } from './components/ForecastPanel';
 import { defaultWaveConfig } from './config/waveConfig';
-import type { WaveConfig } from './config/waveConfig';
+import type { WaveConfig, CameraView } from './config/waveConfig';
 import {
   fetchForecastData,
   findNearestForecast,
@@ -26,6 +26,8 @@ const isEmbedded = (() => {
 
 function App() {
   const [config, setConfig] = useState<WaveConfig>(defaultWaveConfig);
+  // A new object each time, so that picking the same view again still flies back to it
+  const [view, setView] = useState<{ name: CameraView }>({ name: 'shore' });
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
   // On mobile and in embeds the panels start closed and only one can be open at a time
   const panelsControlled = isMobile || isEmbedded;
@@ -86,7 +88,7 @@ function App() {
       </header>
 
       <main className="app-main">
-        <Scene config={config} sky={sky} />
+        <Scene config={config} sky={sky} view={view} />
         <ForecastPanel
           config={config}
           onChange={setConfig}
@@ -97,6 +99,7 @@ function App() {
             config={config}
             sky={sky}
             onChange={setConfig}
+            onViewChange={(name) => setView({ name })}
             {...(panelsControlled ? { isOpen: controlPanelOpen, onOpenChange: handleControlPanelOpenChange } : {})}
           />
         )}

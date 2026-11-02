@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react';
 import type { WaveConfig } from '../config/waveConfig';
-import { configLimits, wavePresets } from '../config/waveConfig';
+import { configLimits, wavePresets, presetViews, type CameraView } from '../config/waveConfig';
 import { dayPhaseLabels, nazareLocalHour, weatherLabel, type SkyState } from '../utils/sky';
 
 interface ControlPanelProps {
   config: WaveConfig;
   sky: SkyState;
   onChange: (config: WaveConfig) => void;
+  /** Asks the scene to fly to the viewpoint that suits a preset */
+  onViewChange?: (view: CameraView) => void;
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
@@ -134,7 +136,7 @@ function EmbedSnippet() {
 
 type SectionKey = 'waves' | 'wind' | 'canyon' | 'sky' | 'visual' | 'embed';
 
-export function ControlPanel({ config, sky, onChange, isOpen: controlledIsOpen, onOpenChange }: ControlPanelProps) {
+export function ControlPanel({ config, sky, onChange, onViewChange, isOpen: controlledIsOpen, onOpenChange }: ControlPanelProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(() => window.innerWidth >= 640);
 
   const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
@@ -174,6 +176,7 @@ export function ControlPanel({ config, sky, onChange, isOpen: controlledIsOpen, 
       cloudCover: config.cloudCover,
       liveSky: config.liveSky,
     });
+    onViewChange?.(presetViews[presetName]);
   };
 
   if (!isOpen) {

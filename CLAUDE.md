@@ -44,6 +44,8 @@ This is a 3D wave simulator built with React Three Fiber (R3F), simulating the N
 
 - **`src/components/Lighthouse.tsx`** - Forte de São Miguel Arcanjo (surveyed outline) with the red Farol tower; rotating beam and spotlights at night.
 
+- **`src/components/CameraRig.tsx`** - Flies the camera to a viewpoint from `cameraViews` (`shore`, `peak`) when a preset asks for it (`presetViews` in waveConfig).
+
 - **`src/components/Scene.tsx`** - R3F Canvas setup with camera, sun/moon/sky lighting, OrbitControls and fog, all driven by `SkyState`.
 
 - **`src/utils/sky.ts`** - Time of day and weather: real sun position over Nazaré, day phase, sky/light/fog colors muted by cloud cover (`computeSky()`) and the water palette (`waterAlbedo()`). The UI theme is derived from it (dark at night, light otherwise).
