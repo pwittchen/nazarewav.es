@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WaveConfig } from '../config/waveConfig';
 import { createShoreMapData, OCEAN_BOUNDS, SHORE_MAP_SEABED_RANGE } from '../utils/terrain';
-import { BREAKER_RATIO, GRAVITY, SET_LENGTH, SET_CYCLE, SET_PEAKS, SET_LULL, type WaveField } from '../utils/waveField';
+import { BREAKER_RATIO, CROSSING_BREAKER, GRAVITY, SET_LENGTH, SET_CYCLE, SET_PEAKS, SET_LULL, type SeabedGrid, type WaveField } from '../utils/waveField';
 import { chopTrains, NOISE_GLSL, RIPPLE_NORMAL_GLSL } from '../utils/waterShader';
 import { waterAlbedo, waterPalette, WATER_ROUGHNESS } from '../utils/sky';
 
@@ -19,22 +19,33 @@ const OCEAN_SEGMENTS = 480;  // 10m grid, aligned so the ±150 edge of the main 
 const HORIZON_SIZE = 40000;  // Flat sea out to the horizon
 const SHORE_MAP_RESOLUTION = 1024;
 
-/** Half-float RGBA texture of the solved field: R = phase, G = gain, B = depth / 100 */
-function createFieldTexture({ grid, phase, gain }: WaveField) {
-  const { nx, nz, heights } = grid;
+function halfFloatTexture(data: Uint16Array, nx: number, nz: number, format: THREE.PixelFormat) {
+  const texture = new THREE.DataTexture(data, nx, nz, format, THREE.HalfFloatType);
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/** Half-float RGBA texture of the solved field: R = phase, G = gain, BA = reflection (crossRe, crossIm) */
+function createFieldTexture({ grid, phase, gain, crossRe, crossIm }: WaveField) {
+  const { nx, nz } = grid;
   const data = new Uint16Array(nx * nz * 4);
   const half = THREE.DataUtils.toHalfFloat;
   for (let n = 0; n < nx * nz; n++) {
     data[n * 4] = half(phase[n]);
     data[n * 4 + 1] = half(gain[n]);
-    data[n * 4 + 2] = half(-heights[n] / 100);
-    data[n * 4 + 3] = half(1);
+    data[n * 4 + 2] = half(crossRe[n]);
+    data[n * 4 + 3] = half(crossIm[n]);
   }
-  const texture = new THREE.DataTexture(data, nx, nz, THREE.RGBAFormat, THREE.HalfFloatType);
-  texture.magFilter = THREE.LinearFilter;
-  texture.minFilter = THREE.LinearFilter;
-  texture.needsUpdate = true;
-  return texture;
+  return halfFloatTexture(data, nx, nz, THREE.RGBAFormat);
+}
+
+/** Half-float texture of the depth on the field's grid / 100 */
+function createDepthTexture({ nx, nz, heights }: SeabedGrid) {
+  const data = new Uint16Array(nx * nz);
+  for (let n = 0; n < nx * nz; n++) data[n] = THREE.DataUtils.toHalfFloat(-heights[n] / 100);
+  return halfFloatTexture(data, nx, nz, THREE.RedFormat);
 }
 
 /**
@@ -84,6 +95,9 @@ export function FarOcean({ config, timeRef, swellClock, field }: FarOceanProps) 
     return texture;
   }, []);
 
+  const depthMap = useMemo(() => createDepthTexture(field.grid), [field.grid]);
+  useEffect(() => () => depthMap.dispose(), [depthMap]);
+
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
     uPrimary: { value: new THREE.Vector4() },    // dirX, dirZ, k0, wrapped omega * t
@@ -94,6 +108,7 @@ export function FarOcean({ config, timeRef, swellClock, field }: FarOceanProps) 
     uChopA: { value: new THREE.Vector4() },      // relative amplitude
     uFoam: { value: new THREE.Vector4() },       // threshold, intensity, whitecaps, enabled
     uField: { value: null as THREE.DataTexture | null },
+    uFieldDepth: { value: depthMap },
     uFieldBounds: { value: new THREE.Vector4(field.grid.minX, field.grid.minZ, 1 / (field.grid.nx * field.grid.cell), 1 / (field.grid.nz * field.grid.cell)) },
     uShoreMap: { value: shoreMap },
     uShoreBounds: { value: new THREE.Vector3(OCEAN_BOUNDS.minX, OCEAN_BOUNDS.minZ, OCEAN_BOUNDS.size) },
@@ -103,7 +118,7 @@ export function FarOcean({ config, timeRef, swellClock, field }: FarOceanProps) 
     uWaterCrest: { value: waterPalette.crest },
     uWaterMurky: { value: waterPalette.murky },
     uClarity: { value: 1 },
-  }), [shoreMap, field.grid]);
+  }), [shoreMap, depthMap, field.grid]);
 
   // New texture for each solved swell
   useEffect(() => {
@@ -128,6 +143,7 @@ export function FarOcean({ config, timeRef, swellClock, field }: FarOceanProps) 
           uniform vec4 uChopA;
           uniform vec4 uFoam;
           uniform sampler2D uField;
+          uniform sampler2D uFieldDepth;
           uniform vec4 uFieldBounds;
           uniform sampler2D uShoreMap;
           uniform vec3 uShoreBounds;
@@ -139,6 +155,7 @@ export function FarOcean({ config, timeRef, swellClock, field }: FarOceanProps) 
           varying float vCrest;
 
           const float BREAKER_RATIO = ${BREAKER_RATIO.toFixed(3)};
+          const float CROSSING_BREAKER = ${CROSSING_BREAKER.toFixed(3)};
           const float SET_LENGTH = ${SET_LENGTH.toFixed(1)};
           const float SET_CYCLE = ${SET_CYCLE.toFixed(1)};
           const float SET_LULL = ${SET_LULL.toFixed(4)};
@@ -152,19 +169,25 @@ export function FarOcean({ config, timeRef, swellClock, field }: FarOceanProps) 
             return SET_LULL + (SET_PEAKS[int(mod(n, SET_CYCLE))] - SET_LULL) * b * b;
           }
 
-          // Mirrors swellHeight() + swellSurface() of utils/waveField.ts, plus the extras in WaveMesh
+          // Mirrors crossedSwell() + swellHeight() + swellSurface() of utils/waveField.ts, plus the extras in WaveMesh
           float oceanHeight(vec2 p, out float breaking, out float crest, out float localDepth) {
             vec2 fieldUv = (p - uFieldBounds.xy) * uFieldBounds.zw + 0.5 * uFieldBounds.zw * ${field.grid.cell.toFixed(1)};
             vec4 f = texture(uField, fieldUv);
             vec4 shore = texture(uShoreMap, (p - uShoreBounds.xy) / uShoreBounds.z);
             float seabed = mix(uSeabedRange.x, uSeabedRange.y, shore.g);
             // Values at the bottom of the fine map's range = deep water, use the coarse grid there
-            float depth = shore.g < 0.01 ? max(50.0, f.b * 100.0) : -seabed;
+            float depth = shore.g < 0.01 ? max(50.0, texture(uFieldDepth, fieldUv).r * 100.0) : -seabed;
             localDepth = depth;
 
-            float theta = uPrimary.z * dot(uPrimary.xy, p) + f.r - uPrimary.w;
-            float unlimited = uAmplitudes.x * (1.0 + (f.g - 1.0) * uAmplitudes.w) * setEnvelope(theta);
-            float limit = BREAKER_RATIO * max(depth, 0.0);
+            // Mirrors crossedSwell(): incident and reflected swell as one wave
+            float crossRe = 1.0 + f.b;
+            float crossMag2 = f.b * f.b + f.a * f.a;
+            float gain = f.g * sqrt((crossRe * crossRe + f.a * f.a) / (1.0 + crossMag2));
+            float crossing = sqrt(crossMag2);
+
+            float theta = uPrimary.z * dot(uPrimary.xy, p) + f.r + atan(f.a, crossRe) - uPrimary.w;
+            float unlimited = uAmplitudes.x * (1.0 + (gain - 1.0) * uAmplitudes.w) * setEnvelope(theta);
+            float limit = BREAKER_RATIO * (1.0 + CROSSING_BREAKER * crossing) * max(depth, 0.0);
             float ratio = limit > 0.0 ? unlimited / limit : 8.0;
             float height = unlimited / pow(1.0 + ratio * ratio * ratio * ratio, 0.25);
             float shoal = smoothstep(0.45, 1.0, ratio);

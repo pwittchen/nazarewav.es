@@ -355,7 +355,7 @@ export function ControlPanel({ config, sky, onChange, onViewChange, isOpen: cont
           {expandedSections.canyon && (
             <div className="section-content">
               <Slider
-                label="Refraction Strength"
+                label="Refraction & Reflection"
                 value={config.canyonAmplification}
                 {...configLimits.canyonAmplification}
                 unit="x"
@@ -497,7 +497,7 @@ export function ControlPanel({ config, sky, onChange, onViewChange, isOpen: cont
 
       <div className="panel-footer">
         <span className="info-text">
-          Waves are refracted over the real Nazaré seabed
+          Waves are refracted and reflected over the real Nazaré seabed
         </span>
       </div>
     </div>

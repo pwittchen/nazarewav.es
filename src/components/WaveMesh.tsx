@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WaveConfig } from '../config/waveConfig';
 import { surveyedHeight, clamp, fbm } from '../utils/terrain';
-import { SET_WRAP, GRAVITY, swellClockStart, swellHeight, swellSurface, type SwellShape } from '../utils/waveField';
+import { SET_WRAP, GRAVITY, crossedSwell, swellClockStart, swellHeight, swellSurface, type CrossedSwell, type SwellShape } from '../utils/waveField';
 import { useWaveField } from './useWaveField';
 import { FarOcean } from './FarOcean';
 import { chopTrains, NOISE_GLSL, RIPPLE_NORMAL_GLSL } from '../utils/waterShader';
@@ -57,11 +57,13 @@ export function WaveMesh({ config }: WaveMeshProps) {
     return { depth, shallowness, foamPattern };
   }, [originalPositions]);
 
-  // Swell phase and gain per vertex, resampled when a new field is solved
+  // Swell phase, gain and crossing per vertex, resampled when a new field is solved
   const swell = useMemo(() => {
     const count = originalPositions.length / 3;
     const phase = new Float32Array(count);
     const gain = new Float32Array(count);
+    const crossing = new Float32Array(count);
+    const crossed: CrossedSwell = { gain: 0, shift: 0, crossing: 0 };
     const { grid, k0, dirX, dirZ } = field;
     for (let v = 0; v < count; v++) {
       const x = originalPositions[v * 3];
@@ -75,10 +77,13 @@ export function WaveMesh({ config }: WaveMeshProps) {
       const n = j * grid.nx + i;
       const lerp2 = (a: Float32Array) =>
         (a[n] * (1 - u) + a[n + 1] * u) * (1 - w) + (a[n + grid.nx] * (1 - u) + a[n + grid.nx + 1] * u) * w;
-      phase[v] = k0 * (dirX * x + dirZ * z) + lerp2(field.phase);
-      gain[v] = lerp2(field.gain);
+      // Incident and reflected swell summed into one wave of local height and phase
+      crossedSwell(lerp2(field.gain), lerp2(field.crossRe), lerp2(field.crossIm), crossed);
+      phase[v] = k0 * (dirX * x + dirZ * z) + lerp2(field.phase) + crossed.shift;
+      gain[v] = crossed.gain;
+      crossing[v] = crossed.crossing;
     }
-    return { phase, gain };
+    return { phase, gain, crossing };
   }, [field, originalPositions]);
 
   // Scratch objects
@@ -126,7 +131,7 @@ export function WaveMesh({ config }: WaveMeshProps) {
       const depth = config.showCoast ? seabed.depth[v] : DEEP;
       const theta = (config.showCoast ? swell.phase[v] : field.k0 * (field.dirX * x + field.dirZ * z)) - wt;
       const unlimited = swellHeight(config.waveHeight, config.showCoast ? swell.gain[v] : 1, config.canyonAmplification, theta);
-      swellSurface(theta, unlimited, depth, shape);
+      swellSurface(theta, unlimited, depth, config.showCoast ? swell.crossing[v] : 0, shape);
 
       const shelter = Math.min(1, Math.max(0, depth / 10));
       const secondary = secondaryA * shelter * Math.sin(secondaryX * x + secondaryZ * z - secondaryOmega * time);

@@ -16,7 +16,7 @@
 ## Features
 
 - **Animated 3D Wave Mesh** - Realistic wave simulation with configurable parameters
-- **Canyon Effect** - Simulates the Nazaré underwater canyon that amplifies wave height in the center
+- **Canyon Effect** - Swell refracted and reflected by the northern rim of the Nazaré Canyon over the real seabed, with the interference beams and pyramid peaks described by Hope et al. (2026)
 - **Wireframe/Solid Display** - Toggle between grid mesh and solid surface rendering
 - **Natural Wave Movement** - Waves propagate naturally toward the viewer
 - **Real-time Controls** - Adjust all parameters with instant visual feedback
@@ -75,9 +75,7 @@ All wave parameters can be configured in one place: `src/config/waveConfig.ts`
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `canyonAmplification` | Wave amplification factor (1-4x) | 2.0 |
-| `canyonFocusWidth` | Width of the amplification zone | 0.4 |
-| `canyonDepthEffect` | Wave steepening near shore (0-1) | 0.7 |
+| `canyonAmplification` | Strength of the computed refraction and reflection (1 = real seabed, 0 = none) | 1 |
 
 ### Display Options
 
@@ -115,7 +113,23 @@ The binaries in `src/data` are baked by `node scripts/bake-nazare.mjs <rawDataDi
 - Land elevation: [Mapzen/AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/), Terrarium format, zoom 14 (EU-DEM over Europe, © European Union, Copernicus)
 - Coastline, buildings, roads, land cover: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, ODbL
 
-The propagation model follows Hope et al., [Focusing of Swell at the Nazaré Submarine Canyon](https://egusphere.copernicus.org/preprints/2026/egusphere-2026-2778/) (EGUsphere preprint, 2026).
+The propagation model follows Hope et al. (2026), see [References](#references).
+
+## Wave model
+
+`src/utils/waveField.ts` applies the findings of Hope et al. (2026):
+
+- **Refraction, not channelling.** Rays are traced over the EMODnet seabed. The shelf slopes down towards the canyon rim, which turns the swell so it meets the rim more obliquely, and the canyon casts a shadow where it turns north by the fort.
+- **Reflection at the rim.** Where rays cross the 50 m contour, the boundary the study used, they split by the reflection coefficient of a trench, the plane-wave approximation of Kirby & Dalrymple (1983) with h1 ≈ 20 m and h2 ≈ 150 m. Long-period swell is reflected, completely above the critical angle. Waves shorter than about 7 s, or meeting the rim nearly head on, pass through. The model reproduces the paper's cut-offs: near-total reflection of swell from 300° above about 10 s on the outer edge and 12 s on the middle one, with the inner edge mostly transmitting.
+- **Interference beams.** The reflected rays carry their own phase and are summed coherently with the incident swell near the rim. Further away the sum becomes incoherent, because over the directional spread the two drift out of step. This produces the beams of focused energy towards Praia do Norte, with peaks along them and gaps between.
+- **Pyramid peaks.** Crossing seas hold higher crests before breaking (McAllister et al., 2024), so the depth-limited breaker index is raised where the two trains cross.
+- Shoaling follows linear wave theory and is only a small factor at the rim (1.1–1.3 at 10–20 m for 20 s swell). The paper's swell attenuation (µ = 3.7·10⁻⁷ m⁻¹) is negligible over the 16 km grid and is left out.
+
+## References
+
+- Hope, G., Rainville, E. J., Seldal, T. I., Vieira, M., Bergamasco, F., Breivik, Ø., Almeida, P., Benetazzo, A., Halsne, T., Bonanad, C., and Furevik, B. R.: *Focusing of Swell at the Nazaré Submarine Canyon*, EGUsphere preprint, 2026, https://egusphere.copernicus.org/preprints/2026/egusphere-2026-2778/ ([doi:10.5194/egusphere-2026-2778](https://doi.org/10.5194/egusphere-2026-2778), CC BY 4.0; a copy is in [`docs/egusphere-2026-2778.pdf`](docs/egusphere-2026-2778.pdf))
+- Kirby, J. T. and Dalrymple, R. A.: *Propagation of Obliquely Incident Water Waves over a Trench*, Journal of Fluid Mechanics, 133, 47–63, 1983
+- McAllister, M. L. et al.: *Three-Dimensional Wave Breaking*, Nature, 633, 601–607, 2024
 
 ## Deployment
 

@@ -20,13 +20,13 @@ This is a 3D wave simulator built with React Three Fiber (R3F), simulating the N
 
 - **`src/config/waveConfig.ts`** - Central configuration: `WaveConfig` interface, `defaultWaveConfig`, `wavePresets` and `configLimits` for UI sliders. Wave heights are offshore significant heights and directions are compass bearings the swell comes from. Also holds sky & weather (`timeOfDay`, `cloudCover`, `liveSky`).
 
-- **`src/utils/waveField.ts`** - Swell propagation over the real seabed, pure TS with no Three.js: ray tracing (energy, refraction, focusing, canyon shadow), an eikonal solve (phase, so crests bend) and shoaling, for one direction and period. Also `swellHeight()`/`swellSurface()`, the surface formula, and the set envelope (`setEnvelope()`, Rayleigh-distributed set peaks scaled so the sea state has exactly the configured Hs; `swellClockStart()` anchors the clock mid-set at `PEAK` when a field is solved). Wavelength and speed follow from the period by the dispersion relation; there is no hand-placed canyon amplification.
+- **`src/utils/waveField.ts`** - Swell propagation over the real seabed after Hope et al. 2026 (`docs/egusphere-2026-2778.pdf`), pure TS with no Three.js: ray tracing (energy, refraction, focusing, canyon shadow), reflection at the canyon rim (rays split at the 50 m contour by `trenchReflection()`, Kirby & Dalrymple's trench coefficient), an eikonal solve (incident phase, so crests bend) and shoaling, for one direction and period. Reflected rays carry their own phase into `crossRe/crossIm`, the coherent reflected/incident ratio, which `crossedSwell()` folds into one wave of local gain and phase (the interference beams); `swellSurface()` takes its `crossing` to raise the breaker index where seas cross. Also `swellHeight()`/`swellSurface()`, the surface formula, and the set envelope (`setEnvelope()`, Rayleigh-distributed set peaks scaled so the sea state has exactly the configured Hs; `swellClockStart()` anchors the clock mid-set at `PEAK` when a field is solved). Wavelength and speed follow from the period by the dispersion relation; there is no hand-placed canyon amplification.
 
-- **`src/components/useWaveField.ts`** - Re-solves the field (~200 ms) when direction or period change, debounced.
+- **`src/components/useWaveField.ts`** - Re-solves the field (~250 ms) when direction or period change, debounced.
 
 - **`src/components/WaveMesh.tsx`** - 300x300 m CPU-animated mesh at the world origin, on the surf zone. Samples the field per vertex, adds the secondary swell, wind chop and foam.
 
-- **`src/components/FarOcean.tsx`** - GPU ocean out to ±2.4 km. Its vertex shader mirrors `swellSurface()` and WaveMesh, so keep them in sync. The field reaches it as a half-float texture.
+- **`src/components/FarOcean.tsx`** - GPU ocean out to ±2.4 km. Its vertex shader mirrors `crossedSwell()`, `swellSurface()` and WaveMesh, so keep them in sync. The field reaches it as a half-float RGBA texture (phase, gain, crossRe, crossIm) plus a depth texture.
 
 - **`src/utils/waterShader.ts`** - Wind chop trains and GLSL noise/ripples shared by both water meshes.
 

@@ -29,7 +29,7 @@ export interface WaveConfig {
   windChopIntensity: number; // Small wave chop caused by wind (0-1)
 
   // Canyon Effect (Nazaré specific)
-  canyonAmplification: number;  // Strength of the computed refraction (1 = real seabed, 0 = none)
+  canyonAmplification: number;  // Strength of the computed refraction and reflection (1 = real seabed, 0 = none)
 
   // Visual Parameters
   foamThreshold: number;     // Wave steepness at which foam appears (0-1)
