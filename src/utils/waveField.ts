@@ -486,6 +486,28 @@ export function crossedSwell(gain: number, crossRe: number, crossIm: number, out
   return out;
 }
 
+export interface SwellSample extends CrossedSwell {
+  phase: number; // Absolute phase of the combined wave: theta = phase - omega t
+}
+
+/** The solved swell at a point (bilinear, clamped to the grid): what WaveMesh samples per vertex */
+export function sampleSwell(field: WaveField, x: number, z: number, out: SwellSample) {
+  const { grid, k0, dirX, dirZ } = field;
+  const fx = Math.min(grid.nx - 1.001, Math.max(0, (x - grid.minX) / grid.cell));
+  const fz = Math.min(grid.nz - 1.001, Math.max(0, (z - grid.minZ) / grid.cell));
+  const i = Math.floor(fx);
+  const j = Math.floor(fz);
+  const u = fx - i;
+  const w = fz - j;
+  const n = j * grid.nx + i;
+  const lerp2 = (a: Float32Array) =>
+    (a[n] * (1 - u) + a[n + 1] * u) * (1 - w) + (a[n + grid.nx] * (1 - u) + a[n + grid.nx + 1] * u) * w;
+  // Incident and reflected swell summed into one wave of local height and phase
+  crossedSwell(lerp2(field.gain), lerp2(field.crossRe), lerp2(field.crossIm), out);
+  out.phase = k0 * (dirX * x + dirZ * z) + lerp2(field.phase) + out.shift;
+  return out;
+}
+
 /**
  * A wave breaks when its height reaches this fraction of the depth. The textbook 0.78
  * holds on flat bottoms; for long-period swell (H/gT² ~ 0.005) on this ~1:40 shelf

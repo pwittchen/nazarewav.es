@@ -415,6 +415,19 @@ input[type="range"]::-webkit-slider-runnable-track {
   transform: translateX(18px);
 }
 
+.toggle-group.disabled label {
+  color: var(--muted-foreground);
+}
+
+.toggle-switch:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toggle-switch:disabled:hover {
+  border-color: var(--border);
+}
+
 /* Light theme toggle fix - white thumb on blue background for better contrast */
 [data-theme="light"] .toggle-switch.active .toggle-thumb {
   background: #ffffff;

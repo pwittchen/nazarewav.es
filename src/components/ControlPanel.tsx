@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import type { WaveConfig } from '../config/waveConfig';
 import { configLimits, wavePresets, presetViews, type CameraView } from '../config/waveConfig';
+import { surfability } from '../utils/surf';
 import { dayPhaseLabels, nazareLocalHour, weatherLabel, type SkyState } from '../utils/sky';
 
 interface ControlPanelProps {
@@ -48,18 +49,21 @@ function Slider({ label, value, min, max, step, unit = '', format, onChange }: S
 interface ToggleProps {
   label: string;
   checked: boolean;
+  disabled?: boolean;
+  title?: string;
   onChange: (checked: boolean) => void;
 }
 
-function Toggle({ label, checked, onChange }: ToggleProps) {
+function Toggle({ label, checked, disabled = false, title, onChange }: ToggleProps) {
   return (
-    <div className="toggle-group">
+    <div className={`toggle-group ${disabled ? 'disabled' : ''}`} title={title}>
       <label>{label}</label>
       <button
-        className={`toggle-switch ${checked ? 'active' : ''}`}
+        className={`toggle-switch ${checked && !disabled ? 'active' : ''}`}
         onClick={() => onChange(!checked)}
         role="switch"
-        aria-checked={checked}
+        aria-checked={checked && !disabled}
+        disabled={disabled}
       >
         <span className="toggle-thumb" />
       </button>
@@ -173,12 +177,15 @@ export function ControlPanel({ config, sky, onChange, onViewChange, isOpen: cont
       waveColor: config.waveColor,
       showCoast: config.showCoast,
       droneFlight: config.droneFlight,
+      surfers: config.surfers,
       timeOfDay: config.timeOfDay,
       cloudCover: config.cloudCover,
       liveSky: config.liveSky,
     });
     onViewChange?.(presetViews[presetName]);
   };
+
+  const surf = surfability(config);
 
   if (!isOpen) {
     return (
@@ -443,6 +450,16 @@ export function ControlPanel({ config, sky, onChange, onViewChange, isOpen: cont
                 checked={config.droneFlight}
                 onChange={(v) => updateConfig('droneFlight', v)}
               />
+              <Toggle
+                label="Surfers"
+                checked={config.surfers}
+                disabled={!surf.surfable}
+                title={surf.reason}
+                onChange={(v) => updateConfig('surfers', v)}
+              />
+              {(config.surfers || !surf.surfable) && (
+                <span className="info-text">{surf.surfable ? surf.reason : `Not surfable: ${surf.reason}`}</span>
+              )}
               <Toggle
                 label="Wireframe Grid"
                 checked={config.wireframe}

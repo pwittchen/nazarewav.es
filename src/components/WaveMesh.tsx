@@ -2,8 +2,10 @@ import { useRef, useMemo, useCallback, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WaveConfig } from '../config/waveConfig';
-import { surveyedHeight, clamp, fbm } from '../utils/terrain';
-import { SET_WRAP, GRAVITY, crossedSwell, swellClockStart, swellHeight, swellSurface, type CrossedSwell, type SwellShape } from '../utils/waveField';
+import { surveyedHeight, fbm } from '../utils/terrain';
+import { SET_WRAP, GRAVITY, sampleSwell, swellClockStart, swellHeight, swellSurface, type SwellSample, type SwellShape } from '../utils/waveField';
+import { Surfers } from './Surfers';
+import { surfability } from '../utils/surf';
 import { useWaveField } from './useWaveField';
 import { FarOcean } from './FarOcean';
 import { chopTrains, NOISE_GLSL, RIPPLE_NORMAL_GLSL } from '../utils/waterShader';
@@ -64,23 +66,10 @@ export function WaveMesh({ config, daylight }: WaveMeshProps) {
     const phase = new Float32Array(count);
     const gain = new Float32Array(count);
     const crossing = new Float32Array(count);
-    const crossed: CrossedSwell = { gain: 0, shift: 0, crossing: 0 };
-    const { grid, k0, dirX, dirZ } = field;
+    const crossed: SwellSample = { gain: 0, shift: 0, crossing: 0, phase: 0 };
     for (let v = 0; v < count; v++) {
-      const x = originalPositions[v * 3];
-      const z = originalPositions[v * 3 + 2];
-      const fx = clamp((x - grid.minX) / grid.cell, 0, grid.nx - 1.001);
-      const fz = clamp((z - grid.minZ) / grid.cell, 0, grid.nz - 1.001);
-      const i = Math.floor(fx);
-      const j = Math.floor(fz);
-      const u = fx - i;
-      const w = fz - j;
-      const n = j * grid.nx + i;
-      const lerp2 = (a: Float32Array) =>
-        (a[n] * (1 - u) + a[n + 1] * u) * (1 - w) + (a[n + grid.nx] * (1 - u) + a[n + grid.nx + 1] * u) * w;
-      // Incident and reflected swell summed into one wave of local height and phase
-      crossedSwell(lerp2(field.gain), lerp2(field.crossRe), lerp2(field.crossIm), crossed);
-      phase[v] = k0 * (dirX * x + dirZ * z) + lerp2(field.phase) + crossed.shift;
+      sampleSwell(field, originalPositions[v * 3], originalPositions[v * 3 + 2], crossed);
+      phase[v] = crossed.phase;
       gain[v] = crossed.gain;
       crossing[v] = crossed.crossing;
     }
@@ -186,6 +175,7 @@ export function WaveMesh({ config, daylight }: WaveMeshProps) {
   // Material opacity based on water clarity (clearer = slightly more transparent)
   const opacity = config.wireframe ? 1 : 0.85 + config.waterClarity * 0.15;
   const gridColor = useMemo(() => wireframeColor(config.waveColor, daylight), [config.waveColor, daylight]);
+  const surf = surfability(config);
 
   return (
     <>
@@ -206,6 +196,9 @@ export function WaveMesh({ config, daylight }: WaveMeshProps) {
         />
       </mesh>
       {config.showCoast && <FarOcean config={config} gridColor={gridColor} timeRef={timeRef} swellClock={swellClock} field={field} />}
+      {config.surfers && surf.surfable && (
+        <Surfers config={config} style={surf.style} field={field} timeRef={timeRef} swellClock={swellClock} />
+      )}
     </>
   );
 }

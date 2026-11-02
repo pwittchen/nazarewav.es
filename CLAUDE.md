@@ -26,6 +26,10 @@ This is a 3D wave simulator built with React Three Fiber (R3F), simulating the N
 
 - **`src/components/WaveMesh.tsx`** - 300x300 m CPU-animated mesh at the world origin, on the surf zone. Samples the field per vertex, adds the secondary swell, wind chop and foam.
 
+- **`src/components/Surfers.tsx`** - Surfers (`surfers` toggle in Display), true to scale, rendered by WaveMesh. Each waits in a lineup found where set waves start breaking, catches a set wave as its face arrives, rides locked to the face just ahead of the crest (`sampleSwell()` phase gradient) while trimming along it, then paddles back. On tow-in days (≥ 6 m) each has a jet ski that circles with them, follows on the shoulder and returns them on its sled. Their surface height repeats WaveMesh's formula (swell, secondary, chop), so keep them in sync.
+
+- **`src/utils/surf.ts`** - `surfability()`: whether the conditions can be surfed (coast on, ≥ 1 m, ≥ 7 s, not blown out by strong or onshore wind) and the style (paddle / tow-in). The Surfers toggle is disabled with the reason shown when they can't.
+
 - **`src/components/FarOcean.tsx`** - GPU ocean out to ±2.4 km. Its vertex shader mirrors `crossedSwell()`, `swellSurface()` and WaveMesh, so keep them in sync. The field reaches it as a half-float RGBA texture (phase, gain, crossRe, crossIm) plus a depth texture.
 
 - **`src/utils/waterShader.ts`** - Wind chop trains and GLSL noise/ripples shared by both water meshes.
