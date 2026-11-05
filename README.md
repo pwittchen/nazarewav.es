@@ -15,6 +15,10 @@
   <a href="https://wittchen.io/notes/nazare-waves/">blog article</a>
 </p>
 
+<p align="center">
+  <img src="docs/images/nazare_extreme.png" alt="nazarewav.es - Extreme preset" />
+</p>
+
 ## Features
 
 - **Animated 3D Wave Mesh** - Realistic wave simulation with configurable parameters
