@@ -11,6 +11,8 @@
 
 <p align="center">
   <a href="https://nazarewav.es"><strong>nazarewav.es</strong></a>
+  ·
+  <a href="https://wittchen.io/notes/nazare-waves/">blog article</a>
 </p>
 
 ## Features
