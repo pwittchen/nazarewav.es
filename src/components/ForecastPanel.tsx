@@ -151,6 +151,14 @@ export function ForecastPanel({ config, onChange, isOpen: controlledIsOpen, onOp
             >
               NazareWaves ↗
             </a>
+            <a
+              href="https://wittchen.io"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="forecast-link"
+            >
+              wittchen.io ↗
+            </a>
           </div>
         </div>
         <button
